@@ -1,4 +1,5 @@
-import os
+import os #file managment
+import zlib #decompression
 
 PDFPath = "Inputs/file-example_PDF_1MB.pdf"
 PDF = open(PDFPath, "rb") #rb is binary read mode
@@ -218,17 +219,141 @@ def pagesParse(currentLocation):
             contentObjectLocation = XrefTable[contentObjectID]
 
             PDF.seek(contentObjectLocation)
-            buffer = PDF.read(2048)
+            buffer = PDF.read()
 
             contentStreams.append(buffer)
             
-        elif kidsIndex != -1:
+        elif subkidsIndex != -1:
             #This is the sub tree node
             nestedStreams = pagesParse(objectLocation)
             contentStreams.extend(nestedStreams)
 
     return contentStreams #This gives us all the content 
 
-pagesParse(catalogObjectLocation)
+contentStreams = pagesParse(catalogObjectLocation) #contentstreams is a list so a for loop is needed
+
+for contentStream in contentStreams:
+    #Now we will find each stream of data and decode it using zlib
+    streamStart = contentStream.find(b"stream")
+    streamEnd = contentStream.find(b"endstream", streamStart)
+
+    #skip 'stream\r\n' or 'stream\n'
+    if contentStream[streamStart + 6: streamStart + 8] == b"\r\n":
+        rawDataStart = streamStart + 8 
+    else:
+        rawDataStart = streamStart + 7
+
+    rawBytes = contentStream[rawDataStart:streamEnd].strip()
+
+    #Checking if stream is flatedecode compressed and decompressed
+    if b"/FlateDecode" in contentStream:
+        try:
+            decompressed = zlib.decompress(rawBytes) 
+            decompressed = decompressed.decode("latin1", errors="ignore")
+        except:
+            decompressed = zlib.decompress(rawBytes, -zlib.MAX_WBITS) #-zlib.MAX_WBITS is a decompression method
+            decompressed = decompressed.decode("latin1", errors="ignore")
+    else:
+        decompressed = rawBytes.decode("latin1", errors="ignore")
+
+    #Now I need to parse text instructions from the PDF layout commands.  
+    #BT ET are begin text and end text blocks
+    #Td is text move eg 95.6 422.1 Td . first 2 are coordinates(from left, from bottom)
+    # /F2 10.5 Tf: this is text fond and size
+    #[ <1D0B> -4 <0A> 3 ... ] TJ: Tj is an array operator which renders text, angle brackets contain hexadecimal character code, numbers are micor adjustments
+    # AND SO ON 
+
+    #First step is separating all text parts into text or Tj (hex)
+    #and then save it 
+
+    #BT is start, ET is end, TJ is hexacode array, Tj is string 
+
+    extractedData = []
+    cursor = 0
+
+    while True:
+        BTPosition = decompressed.find("BT", cursor)
+        ETPosition = decompressed.find("ET", BTPosition + 2)
+
+        if BTPosition == -1 or ETPosition == -1:
+            break
+
+        block = decompressed[BTPosition:ETPosition]
+
+        #Track search index inside the block so find() doesn't get stuck in an infinite loop
+        blockCursor = 0
+
+        while True:
+            #Look for TJ and Tj starting from blockCursor
+            TJPosition = block.find("TJ", blockCursor)
+            TjPosition = block.find("Tj", blockCursor)
+
+            #Break when no more text operators exist in this block
+            if TJPosition == -1 and TjPosition == -1:
+                break
+
+            #Process TJ (array) if it comes before Tj (or if Tj doesn't exist)
+            if TJPosition != -1 and (TjPosition == -1 or TJPosition < TjPosition):
+                arrayStart = block.find("[", blockCursor)
+                arrayEnd = block.find("]", arrayStart)
+
+                if arrayStart != -1 and arrayEnd != -1:
+                    arrayContent = block[arrayStart + 1 : arrayEnd]
+                    extractedData.append({"type": "TJ", "raw": arrayContent})
+
+                #Advance inner cursor past 'TJ'
+                blockCursor = TJPosition + 2
+
+            #Process Tj (single string)
+            elif TjPosition != -1:
+                #Slice up to TjPosition to find string bounds for THIS operator
+                subBlock = block[blockCursor:TjPosition]
+
+                SStart = subBlock.find("(")
+                SEnd = subBlock.rfind(")")
+
+                HStart = subBlock.find("<")
+                HEnd = subBlock.rfind(">")
+
+                if SStart != -1 and SEnd != -1 and SStart < SEnd:
+                    stringContent = subBlock[SStart + 1 : SEnd]
+                    extractedData.append({"type": "TjLiteral", "raw": stringContent})
+                elif HStart != -1 and HEnd != -1 and HStart < HEnd:
+                    hexContent = subBlock[HStart + 1 : HEnd]
+                    extractedData.append({"type": "TjHex", "raw": hexContent})
+
+                #Advance inner cursor past 'Tj'
+                blockCursor = TjPosition + 2
+
+        #Moved cursor update OUTSIDE the inner loop so the outer loop can find the next BT
+        cursor = ETPosition + 2
+
+    #Now extracted data is a list of dictionaries with TJ type, TjLiteral, TjHex
+    #Now I need to scan each iteam and save all the TJ and TjHex inn a clean list.
+
+    allPageHexCodes = []
+    for item in extractedData:
+        if item["type"] == "TJ": 
+            rawArray = item["raw"] #example vale of rawArray will be '<1D0B>-4<0A>'
+            
+            index = 0
+
+            while index < len(rawArray):
+                if rawArray[index] == "<":
+                    closeIndex = rawArray.find(">", index)
+                    if closeIndex != -1:
+                        hexCode = rawArray[index + 1: closeIndex]
+                        allPageHexCodes.append(hexCode)
+                        index = closeIndex
+                index += 1
+        elif item["type"] == "TjHex":
+            allPageHexCodes.append(item["raw"]) #for TjHex, everything is already in the correct form
+
+    #Now the next step is to map hex codes to standard letters like 'A' etc.
+    #I need to find the page's /Resources /Font dictionary 
+    #Find /ToUnicode table 
+    #parse the table into a dictionary in the format { "1D0B": "A", "0A": "e", ... } etc
+    print(allPageHexCodes)
+
 
 PDF.close()     
