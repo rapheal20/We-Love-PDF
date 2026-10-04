@@ -211,7 +211,87 @@ def pagesParse(currentLocation):
 
         if contentIndex != -1:
             #Its a leaf page so we will extract the content stream object ID after /contents
+
+            resourceIndex = buffer.find(b"/Resources") #Going to resources
+
+            if resourceIndex != -1: 
+                resourceLine = buffer[resourceIndex:].split(b"\n")[0]
+                resourceList = resourceLine.split() #This will get us the list of stuff around /resources. There the object id of resources would be written in the next index. We will use the Xreftabelo and object id to get the location of resources 
+                
+                for token in resourceList:
+                    if token.isdigit():
+                            resourceObject = int(token.decode("latin1"))
+                            break
+                
+                resourceObjectLocation = XrefTable[resourceObject]
+
+                PDF.seek(resourceObjectLocation)
+                secondarybuffer = PDF.read(4096)
+
+                fontIndex = secondarybuffer.find(b"/Font") #Going to fonts
+
+                if fontIndex != -1:
+                    fontSnippet = secondarybuffer[fontIndex : fontIndex + 100]
+                    fontTokens = fontSnippet.split()
+
+                    for idx, token in enumerate(fontTokens): #enumerate 
+                        if token == b"R" and idx >= 2:
+                            fontObject = int(fontTokens[idx - 2].decode("latin1"))
+                            fontObjectLocation = XrefTable[fontObject]
+
+                            # Seek to actual Font Object
+                            PDF.seek(fontObjectLocation)
+                            secondarybuffer = PDF.read(4096)  # Read 4096 bytes for full Font Dict
+                            break
+
+            # buffer right now has a nested dictionary which is storing each font object as F1 F2 etc
             
+            
+            toUnicodePosition = secondarybuffer.find(b"/ToUnicode")
+
+            if toUnicodePosition != -1:
+                lines = secondarybuffer[toUnicodePosition + 10 : toUnicodePosition + 60]
+
+                cmapObjectID = None
+                digitBytes = b""
+
+                for byte in lines:
+                    if 48 <= byte <= 57:  # ASCII 0-9
+                        digitBytes += bytes([byte])
+                    elif digitBytes:
+                        cmapObjectID = int(digitBytes.decode("latin1"))
+                        break
+
+                if cmapObjectID is not None:
+                    cmapLocation = XrefTable[cmapObjectID]
+                    PDF.seek(cmapLocation)
+                    cmapBuffer = PDF.read(4096)
+
+                    sStart = cmapBuffer.find(b"stream")
+                    sEnd = cmapBuffer.find(b"endstream", sStart)
+
+                    if sStart != -1 and sEnd != -1:
+                        if cmapBuffer[sStart + 6 : sStart + 8] == b"\r\n":
+                            rawDataStart = sStart + 8
+                        else:
+                            rawDataStart = sStart + 7
+
+                        rawBytes = cmapBuffer[rawDataStart:sEnd].strip()
+
+                        try:
+                            cmapText = zlib.decompress(rawBytes).decode("latin1", errors="ignore")
+                        except Exception:
+                            cmapText = zlib.decompress(rawBytes, -zlib.MAX_WBITS).decode("latin1", errors="ignore")
+
+                        print(cmapText)
+                    else:
+                        print(f"Could not find stream/endstream in Object {cmapObjectID}.")
+                else:
+                    print("Could not parse object ID number after /ToUnicode.")
+            else:
+                print("No /ToUnicode reference found in this font object.")
+            
+            PDF.seek(objectLocation)
             contents = buffer[contentIndex:].split(b"\n")[0] #This will get us the first line. eg b'/Contents 12 0 R'
             characters = contents.split()
             contentObjectID = int(characters[1].decode("latin1"))
@@ -353,7 +433,6 @@ for contentStream in contentStreams:
     #I need to find the page's /Resources /Font dictionary 
     #Find /ToUnicode table 
     #parse the table into a dictionary in the format { "1D0B": "A", "0A": "e", ... } etc
-    print(allPageHexCodes)
-
+    #To get the resources, I am adding code to the function which is already getting content
 
 PDF.close()     
