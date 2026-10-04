@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+
+    <style>
+        @font-face {
+            font-family: 'Graphik-regular';
+            src: url('Graphik-Font\\Graphik-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+            }
+
+        @font-face {
+            font-family: 'Graphik-semibold';
+            src: url('Graphik-Font\\Graphik-Semi-Bold.otf') format('opentype');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+            }
+
+        @font-face {
+            font-family: 'Graphik-medium';
+            src: url('Graphik-Font\\Graphik-Medium.otf') format('opentype');
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+            }
+        
+        body{
+            margin: 0;
+            padding: 0;
+        }
+
+        .bodySection1{
+            background-image: url('IMAGES\\background.svg');
+            background-color: #f5f5fa;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: cover;
+            padding-bottom: 40px;
+            min-height: 400px;
+            margin-top: 60px;
+
+        }
+
+        .bodyHolder{
+            padding: 0 24px;
+            margin: 0;
+            
+        }
+
+        .featuresHolder{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin: 0;
+            align-items: stretch;
+            background-color: transparent;
+        }
+
+        .feature{
+            display: flex;
+            flex-direction: column;
+            border-width: 1px;
+            border-color: #d6d6df;
+            border-radius: 16px;
+            border-style: solid;
+            padding: 24px;
+            background-color: white;      
+            transition: 30ms;    
+        }
+
+        .feature:hover{
+            border-color: #292931;
+        }
+
+        .title{
+            font-size: 18px;
+            color: #33333B;
+            font-family: 'Graphik-regular';
+            margin: 0 0 8px 0 ;
+            padding: 0;
+        }
+
+        .description{
+            font-size: 12px;
+            color: #707078;
+            letter-spacing: 0.3px;
+            font-family: 'Graphik-regular';
+            margin: 0;
+            padding: 0;
+        }
+
+        .imgHolder{
+            display: inline;
+            padding: 0;
+            margin: 0;
+            margin-bottom: 16px;
+        }
+
+        .featureImg{
+            width: 42px;
+            height: 42px;
+            margin: 0;
+            padding: 0;
+            margin-bottom: 16px;
+        }
+
+        .mainTitle{
+            /* height: 300px; */
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-semibold';
+            font-size: 42px;
+            text-align: center;
+            justify-self: center;
+            max-width: 1100px;
+            line-height: 52px;
+            color: #33333B;
+            margin-bottom: 4px;
+        }
+
+        .mainSubtitle{
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-regular';
+            font-size: 20px;
+            text-align: center;
+            max-width: 1100px;
+            color: #707078;
+            margin-bottom: 12px;
+            vertical-align: baseline;
+            justify-self: center;
+        }
+
+        .titleHolder{
+            padding: 24px;
+            margin: 0;
+            justify-content: space-between;
+        }
+
+        .filterButton{
+            font-family: 'Graphik-medium';
+            font-size: 16px;
+            text-align: center;
+            padding: 4px 16px;
+            background-color: white;
+            border-width: 1px;
+            border-color: #d6d6df;
+            border-radius: 16px;
+            border-style: solid;
+            color: #47474f;
+            transition: 30ms; 
+        }
+
+        .filterButton:hover{
+            border-color: #292931;
+        }
+
+        .filterButtonClick{
+            background-color: #292931;
+            color: white;
+        }
+
+        .filterHolder{
+            display: flex;
+            align-self: center;
+            justify-self: center;
+            column-gap: 16px;
+            row-gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 32px;
+        }
+
+
+        .headerHolder{
+            height: 60px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+            background-color: white;
+            box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.1);
+            align-content: center;
+            padding: 0 24px;
+            display: flex;
+            flex-direction: row;
+            align-self: center;
+            align-content: center;
+            gap: 24px;
+        }
+
+        .siteLogo{
+            height: 30px;
+            align-self: center;
+            
+        }
+
+        .headerButton{
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-regular';
+            letter-spacing: 0.3px;
+            font-weight: 500;
+            font-size: 12px;
+            text-align: center;
+            background-color: transparent;
+            border: none;
+        }
+
+        .dropMenu{
+            background-color: white;
+            font-family: 'Graphik-regular';
+            padding: 24px;
+            width: 80%;
+            justify-self: center;
+            box-shadow: 0px 0px 1px 1px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            position: fixed;
+            top: 70px;
+            z-index: 1000;
+            visibility: hidden;
+
+        }
+        .menuRows{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            /* justify-content: space-evenly; */
+            row-gap: 24px;
+            column-gap: 8px;
+            
+            
+        }
+        .menuColHolder{
+            display: flex;
+            flex-direction: column;
+            
+            
+        }
+
+        .menuCol{
+            display: flex;
+            flex-direction: column;
+            
+        }
+
+        .menuFeature{
+            display: flex;
+            flex-direction: row;
+            align-content: center;
+            /* margin: 4px; */
+            padding: 8px;
+            /* margin-left: 0; */
+            gap: 8px;
+            /* border-color: #161616;
+            border-style: solid; */
+        }
+
+        .menuFeature:hover{
+            background-color: #d6d6df;
+            border-radius: 4px;
+        }
+
+        .menuImg{
+            height: 20px;
+            width: 20px;
+
+        }
+
+        .menutitle{
+            margin: 0;
+            padding: 0;
+            color: #161616;
+            font-size: 13px;
+        }
+
+        .menuHeading{
+            font-size: 14px;
+            text-align: left;
+            color: rgb(112, 112, 120);
+            padding: 0;
+            margin: 0;
+            margin-bottom: 7px;
+        }
+
+        .dropShow{
+            visibility: visible;
+        }
+
+
+        /* @media (max-w){
+            
+        } */
+
+
+    </style>
+</head>
+<body>
+    <header>
+        <div class="headerHolder">
+            <img src="IMAGES\\Logo.svg" class="siteLogo">
+            <button class="headerButton" onclick="
+                // menuLoader('organize')
+                // menuLoader('optimize')
+                // menuLoader('convertToPDF')
+                // menuLoader('convertFromPDF')
+                // menuLoader('edit')
+                // menuLoader('security')
+                document.querySelector('.dropMenu').classList.add('dropShow')
+
+
+            
+            ">ALL PDF TOOLS ⮷</button>
+
+            
+            
+
+            
+
+        </div>
+
+    </header>
+
+    <div class="bodySection1">
+        <div class="titleHolder">
+            <h1 class="mainTitle">Every tool you need to work with PDFs in one place</h1>
+            <p class="mainSubtitle">Every tool you need to use PDFs, at your fingertips. All are 100% FREE and easy to use! Merge, split, compress, convert, rotate, unlock and watermark PDFs with just a few clicks.</p>
+        </div>
+
+        <div class="bodyHolder">
+            <div class="filterHolder">
+                <button class="filterButton filterButtonClick" onclick="
+                    featureLoader()
+                    ">All</button>
+                <button class="filterButton" onclick="
+                    featureLoader('organize')
+                    ">Organize PDF</button>
+                <button class="filterButton" onclick="
+                    featureLoader('optimize')
+                    ">Optimize PDF</button>
+                <button class="filterButton" onclick="
+                    featureLoader('convert')
+                    ">Convert PDF</button>
+                <button class="filterButton" onclick="
+                    featureLoader('edit')
+                    ">Edit PDF</button>
+                <button class="filterButton" onclick="
+                    featureLoader('security')
+                    ">PDF Security</button>
+                <button class="filterButton" onclick="
+                    featureLoader('intelligence')
+                    ">PDF intelligence</button>
+            </div>
+            <div class="featuresHolder">
+                
+            </div>
+        </div>
+    </div>
+
+
+
+    <div class="dropMenu">
+                <div class="menuRows">
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">ORGANIZE PDF</h4>
+                        <div class="menuCol organizeCol">
+                            <!-- <div class="menuFeature ${features[i].subcatagory}"> 
+                                <img src="${features[i].img}" class="menuImg">  
+                                <h3 class="menutitle">${features[i].name}</h3>
+                            </div> -->
+                        </div>
+                    </div>
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">OPTIMIZE PDF</h4>
+                        <div class="menuCol optimizeCol">
+                            
+                        </div>
+                    </div>
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">CONVERT TO PDF</h4>
+                        <div class="menuCol convertToPDFCol">
+                
+                        </div>
+                    </div>
+                
+                <!-- <div class="menuRows"> -->
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">CONVERT FROM PDF</h4>
+                        <div class="menuCol convertFromPDFCol">
+                            
+                        </div>
+                    </div>
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">EDIT PDF</h4>
+                        <div class="menuCol editCol">
+                            
+                        </div>
+                    </div>
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">PDF SECURITY</h4>
+                        <div class="menuCol securityCol">
+                            
+                        </div>
+                    </div>
+                    <div class="menuColHolder">
+                        <h4 class="menuHeading">PDF INTELLIGENCE</h4>
+                        <div class="menuCol intelligenceCol">
+                            
+                        </div>
+                    </div>
+                <!-- </div> -->
+                 </div>
+            </div>
+
+
+    <script>
+        const features= [
+            {
+                name: "Merge PDF",
+                description: "Combine PDFs in the order you want with the easiest PDF merger available.",
+                img: "IMAGES\\Merge_PDF.svg",
+                category: "organize"
+            },
+            {
+                name: "Split PDF",
+                description: "Separate one page or a whole set for easy conversion into independent PDF files.",
+                img: "IMAGES\\Split_PDF.svg",
+                category: "organize"
+            },
+            {
+                name: "Compress PDF",
+                description: "Reduce file size while optimizing for maximal PDF quality.",
+                img: "IMAGES\\Compress_PDF.svg",
+                category: "optimize"
+            },
+            {
+                name: "PDF to Word",
+                description: "Easily convert your PDF files into easy to edit DOC and DOCX documents. The converted WORD document is almost 100% accurate.",
+                img: "IMAGES\\PDF_to_Word.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF"
+            },
+            {
+                name: "PDF to PowerPoint",
+                description: "Turn your PDF files into easy to edit PPT and PPTX slideshows.",
+                img: "IMAGES\\PDF_to_PowerPoint.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF"
+            },
+            {
+                name: "PDF to Excel",
+                description: "Pull data straight from PDFs into Excel spreadsheets in a few short seconds.",
+                img: "IMAGES\\PDF_to_Excel.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF"
+            },
+            {
+                name: "Word to PDF",
+                description: "Make DOC and DOCX files easy to read by converting them to PDF.",
+                img: "IMAGES\\Word_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF"
+            },
+            {
+                name: "PowerPoint to PDF",
+                description: "Make PPT and PPTX slideshows easy to view by converting them to PDF.",
+                img: "IMAGES\\PowerPoint_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF"
+            },
+            {
+                name: "Excel to PDF",
+                description: "Make EXCEL spreadsheets easy to read by converting them to PDF.",
+                img: "IMAGES\\Excel_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF"
+            },
+            {
+                name: "Edit PDF",
+                description: "Add text, images. shapes or freehand annotations to a PDF document. Edit the size, font, and color of the added content.",
+                img: "IMAGES\\Edit_PDF.svg",
+                category: "edit"
+            },
+            {
+                name: "PDF to JPG",
+                description: "Convert each PDF page into a JPG or extract all images contained in a PDF.",
+                img: "IMAGES\\PDF_to_JPG.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF"
+            },
+            {
+                name: "JPG to PDF",
+                description: "Convert JPG images to PDF in seconds. Easily adjust orientation and margins.",
+                img: "IMAGES\\JPG_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF"
+            },
+            {
+                name: "Sign PDF",
+                description: "Sign yourself or request electronic signatures from others.",
+                img: "IMAGES\\Sign_PDF.svg",
+                category: "security"
+            },
+            {
+                name: "Watermark",
+                description: "Stamp an image or text over your PDF in seconds, Choose the typography, transparency and position.",
+                img: "IMAGES\\Watermark.svg",
+                category: "edit"
+            },
+            {
+                name: "Rotate PDF",
+                description: "Rotate your PDFs the way you need them. You can even rotate multiple PDFs at once!",
+                img: "IMAGES\\Rotate_PDF.svg",
+                category: "edit"
+            },
+            {
+                name: "HTML to PDF",
+                description: "Convert webpages in HTML to PDF. Copy and paste the LJRL of the page you want and convert it to PDF with a click.",
+                img: "IMAGES\\HTML_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF"
+                
+            },
+            {
+                name: "Unlock PDF",
+                description: "Remove PDF password security, giving you the freedom to use your PDFs as you want.",
+                img: "IMAGES\\Unlock_PDF.svg",
+                category: "security"
+            },
+            {
+                name: "Protect PDF",
+                description: "Protect PDF files with a password. Encrypt PDF documents to prevent unauthorized access.",
+                img: "IMAGES\\Protect_PDF.svg",
+                category: "security"
+            },
+            {
+                name: "Organize PDF",
+                description: "Sort pages of your PDF file however you like. Delete PDF pages or add PDF pages to your document at your convenience.",
+                img: "IMAGES\\Organize_PDF.svg",
+                category: "organize"
+            },
+            {
+                name: "PDF to PDF/A",
+                description: "Transform your PDF to PDF/A, the ISO-standardized version of PDF for long-term archiving. Your PDF will preserve formatting when accessed in the future.",
+                img: "IMAGES\\PDF_to_PDF_A.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF"
+            },
+            {
+                name: "Repair PDF",
+                description: "Repair a damaged PDF and recover data from corrupt PDF. Fix PDF files with our Repair tool.",
+                img: "IMAGES\\Repair_PDF.svg",
+                category: "optimize"
+            },
+            {
+                name: "Page numbers",
+                description: "Add page numbers into PDFs with ease. Choose your positions, dimensions, typography.",
+                img: "IMAGES\\Page_numbers.svg",
+                category: "edit"
+            },
+            {
+                name: "Scan to PDF",
+                description: "Capture document scans from your mobile device and send them instantly to your browser.",
+                img: "IMAGES\\Scan_to_PDF.svg",
+                category: "organize"
+            },
+            {
+                name: "OCR PDF",
+                description: "Easily convert scanned PDF into searchable and selectable documents.",
+                img: "IMAGES\\OCR_PDF.svg",
+                category: "optimize"
+            },
+            {
+                name: "Compare PDF",
+                description: "Show a side-by-side document comparison and easily spot changes between different file versions.",
+                img: "IMAGES\\Compare_PDF.svg",
+                category: "security"
+            },
+            {
+                name: "Redact PDF",
+                description: "Redact text and graphics to permanently remove sensitive information from a PDF.",
+                img: "IMAGES\\Redact_PDF.svg",
+                category: "security"
+            },
+            {
+                name: "Crop PDF",
+                description: "Crop margins of PDF documents or select specific areas. then apply the changes to one page or the whole document.",
+                img: "IMAGES\\Crop_PDF.svg",
+                category: "edit"
+            },
+            {
+                name: "PDF Forms",
+                description: "Detect form fields automatically, create interactive fillable PDFs, or fill PDF forms yourself. Add text fields, checkboxes, multiple choice fields. and lists.",
+                img: "IMAGES\\PDF_Forms.svg",
+                category: "edit"
+            },
+            {
+                name: "AI Summarizer",
+                description: "Quickly generate concise summaries from articles, paragraphs, and essays, providing clear and precise key points in seconds.",
+                img: "IMAGES\\AI_Summarizer.svg",
+                category: "intelligence"
+            },
+            {
+                name: "Translate PDF",
+                description: "Easily translate PDF files powered by A1. Keep fonts, intact.",
+                img: "IMAGES\\Translate_PDF.svg",
+                category: "intelligence"
+            },
+            {
+                name: "PDF to Markdown",
+                description: "Easily turn PDFs into Markdown files, Perfect for notes, docs. and LLMs, Headings, tables, lists, and links preserved automatically.",
+                img: "IMAGES\\PDF_to_Markdown.svg",
+                category: "intelligence",
+            }
+
+        ]
+
+        featureLoader()
+        // name: "Merge PDF",
+        // description: "Combine PDFs in the order you want with the easiest PDF merger available.",
+        // img: "IMAGES\\Merge_PDF.svg",
+        // category: "organize"
+
+            
+        
+        function featureLoader(filter = null) {
+            lenghtOFFeatures = features.length
+            featuresHtml = ""
+            if (filter){
+                
+                for (let i=0;i < lenghtOFFeatures; i++)
+                {   
+                    if (filter == features[i].category) {
+                        featuresHtml+=
+                        `
+                        <div class="feature ${features[i].category}"> 
+                            
+                            <img src="${features[i].img}" class="featureImg">  
+                            <h3 class="title">${features[i].name}</h3>
+                            <p class="description">${features[i].description}</p>
+                        
+                        </div>
+                        `
+                    }}
+            
+            } else {
+                for (let i=0;i < lenghtOFFeatures; i++)
+                {   
+                    
+                featuresHtml+=
+                `
+                <div class="feature ${features[i].category}"> 
+                    
+                    <img src="${features[i].img}" class="featureImg">  
+                    <h3 class="title">${features[i].name}</h3>
+                    <p class="description">${features[i].description}</p>
+                
+                </div>
+             `
+                }
+
+            }
+            document.querySelector(".featuresHolder").innerHTML = featuresHtml
+        }
+
+
+        function menuLoader(filter) {
+            lenghtOFFeatures = features.length
+            featuresHtml = ""
+            if (filter){
+                
+                for (let i=0;i < lenghtOFFeatures; i++)
+                {   
+
+                    if (filter == 'convertToPDF' || filter == 'convertFromPDF'){
+                        if (filter == features[i].subcatagory){
+                                featuresHtml+=
+                                `
+                                <div class="menuFeature ${features[i].subcatagory}"> 
+                                    <img src="${features[i].img}" class="menuImg">  
+                                    <h3 class="menutitle">${features[i].name}</h3>
+                                </div>
+                                `
+                        }
+                    } else {
+                        if (filter == features[i].category) {
+                            featuresHtml+=
+                            `
+                            <div class="menuFeature ${features[i].category}"> 
+                                <img src="${features[i].img}" class="menuImg">  
+                                <h3 class="menutitle">${features[i].name}</h3>
+                            </div>
+                            `
+                                }        
+                            }
+                
+            }
+        }       
+                console.log(featuresHtml)
+                document.querySelector(`.${filter}Col`).innerHTML = featuresHtml
+
+    }
+
+
+    // {
+    //             name: "PDF to JPG",
+    //             description: "Convert each PDF page into a JPG or extract all images contained in a PDF.",
+    //             img: "IMAGES\\PDF_to_JPG.svg",
+    //             category: "convert",
+    //             subcatagory: "convertFromPDF"
+    //         },
+    //         {
+    //             name: "JPG to PDF",
+    //             description: "Convert JPG images to PDF in seconds. Easily adjust orientation and margins.",
+    //             img: "IMAGES\\JPG_to_PDF.svg",
+    //             category: "convert",
+    //             subcatagory: "convertToPDF"
+    //         },
+
+
+
+    menuLoader('organize')
+    menuLoader('optimize')
+    menuLoader('convertToPDF')
+    menuLoader('convertFromPDF')
+    menuLoader('edit')
+    menuLoader('security') 
+    menuLoader('intelligence')
+
+
+
+
+
+
+        const filters = document.querySelectorAll('.filterButton')
+        filters.forEach(filter_button => {
+            filter_button.addEventListener('click', () => {
+                filters.forEach(filter_button_remove => {
+                    filter_button_remove.classList.remove('filterButtonClick')
+                })
+                filter_button.classList.add('filterButtonClick')
+
+            })
+        });
+
+
+    </script>
+</body>
+
+
+
+
+</html>
