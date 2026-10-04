@@ -20,6 +20,7 @@ buffer = PDF.read()
 cursor = 0
 XrefTable = ['s', 't', 'a', 'r', 't', 'x', 'r', 'e', 'f']
 XrefTableAddress = ""
+delimiterList = [" ", "\n", "\r", ">", "/"]
 
 while cursor < bufferSize:
     currentByte = chr(buffer[cursor]) #This returns bytes as ASCII integer values. chr converts back into characters etc.
@@ -41,7 +42,7 @@ while cursor < bufferSize:
 n = 0
 #TESTING: output should be 468188
 while XrefTableEnd+2+n < bufferSize:
-    if chr(buffer[XrefTableEnd+2+n]) == '\n':
+    if chr(buffer[XrefTableEnd+2+n]) in delimiterList:
         break
     XrefTableAddress += (chr(buffer[XrefTableEnd+2+n])) # +2 for 2 spaces
     n += 1
@@ -122,7 +123,7 @@ while i < len(rawTrailer):
             
     if word == root:
         #print(chr(rawTrailer[i+n+2]))
-        while chr(rawTrailer[i+n+2]) !=  " ":
+        while chr(rawTrailer[i+n+2]) not in delimiterList:
             rootObjectID += chr(rawTrailer[i+n+2])
             i += 1
     i += 1
@@ -141,14 +142,93 @@ buffer = PDF.read()
 
 catalogIndex = buffer.find(b"/Type/Catalog/Pages ") #This will return the index of the byte where it found the phrase
 
-i = 0
+index = 0
 catalogObjectID = "" 
-while chr(buffer[catalogIndex+20]) != " ":
-    if i > len(buffer):
+while chr(buffer[catalogIndex+20+index]) not in delimiterList:
+    if catalogIndex+20+index > len(buffer):
         break
-    catalogObjectID += chr(buffer[catalogIndex+20+i])
-    i += 1
+    catalogObjectID += chr(buffer[catalogIndex+20+index])
+    index += 1
 
-print(catalogObjectID)
+catalogObjectID = int(catalogObjectID)
+
+catalogObjectLocation = XrefTable[catalogObjectID]
+PDF.seek(catalogObjectLocation)
+buffer = PDF.read(1024)
+
+#print(buffer)
+
+countIndex = buffer.find(b"/Count ") #This will return the index of the byte where it found the phrase
+
+#print(countIndex)
+
+index = 0
+numberOfPages = "" 
+while chr(buffer[countIndex+index+7]) not in delimiterList:
+    if countIndex+index+7 > len(buffer):
+        break
+    numberOfPages += chr(buffer[countIndex+index+7])
+    index += 1
+
+#I need to convert the pages code into a functions so that I can recursively call it
+#We will extract all references inside /Kids and get their object id
+#fetch each object and go to its details
+#if it is a /Type/Page then its an actual leaf page so collect its /Contents
+#if it has /Kids so recall the function
+
+def pagesParse(currentLocation):
+    objectList = []
+    contentStreams = []
+
+    PDF.seek(currentLocation)
+    buffer = PDF.read(1024)
+
+    kidsIndex = buffer.find(b"/Kids")
+    if kidsIndex == -1:
+        return contentStreams
+
+    startBracket = buffer.find(b"[", kidsIndex)
+    endBracket = buffer.find(b"]", startBracket)
+
+    kidsList = buffer[startBracket + 1 : endBracket]
+    
+    kidsList = kidsList.split()
+
+    i = 0
+    for i in range(len(kidsList)):
+        if kidsList[i] == b"R":
+            object = int(kidsList[i-2].decode('latin1'))
+            objectList.append(object)
+
+    for object in objectList:  
+        objectLocation = XrefTable[object]
+        PDF.seek(objectLocation)
+        buffer = PDF.read(1024)
+
+        contentIndex = buffer.find(b"/Contents") #These return -1 if they can't find
+        subkidsIndex = buffer.find(b"/Kids")
+
+        if contentIndex != -1:
+            #Its a leaf page so we will extract the content stream object ID after /contents
+            
+            contents = buffer[contentIndex:].split(b"\n")[0] #This will get us the first line. eg b'/Contents 12 0 R'
+            characters = contents.split()
+            contentObjectID = int(characters[1].decode("latin1"))
+
+            contentObjectLocation = XrefTable[contentObjectID]
+
+            PDF.seek(contentObjectLocation)
+            buffer = PDF.read(2048)
+
+            contentStreams.append(buffer)
+            
+        elif kidsIndex != -1:
+            #This is the sub tree node
+            nestedStreams = pagesParse(objectLocation)
+            contentStreams.extend(nestedStreams)
+
+    return contentStreams #This gives us all the content 
+
+pagesParse(catalogObjectLocation)
 
 PDF.close()     
