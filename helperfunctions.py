@@ -245,7 +245,7 @@ def pagesParse(currentLocation):
                             break
 
             # buffer right now has a nested dictionary which is storing each font object as F1 F2 etc
-            
+            # Work for tomorrow
             
             toUnicodePosition = secondarybuffer.find(b"/ToUnicode")
 
