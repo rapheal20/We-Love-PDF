@@ -44,7 +44,7 @@
             background-position: center;
             background-size: cover;
             padding-bottom: 40px;
-            min-height: 400px;
+            min-height: 100dvh;
             margin-top: 60px;
 
         }
@@ -132,7 +132,8 @@
             max-width: 1100px;
             line-height: 52px;
             color: #26030a;
-            margin-bottom: 4px;
+            margin: 30px 0;
+
         }
 
         .mainSubtitle{
@@ -150,6 +151,7 @@
 
         .titleHolder{
             padding: 24px;
+            padding-top: ;
             margin: 0;
             justify-content: space-between;
         }
@@ -198,12 +200,33 @@
             background-color: white;
             box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.1);
             align-content: center;
+            padding: 0px 24px;
+            display: flex;
+            flex-direction: row;
+            align-self: center;
+            align-content: center;
+            gap: 24px;
+            justify-content: space-between;
+        }
+
+        .headerSegment{
+            align-content: center;
             padding: 0 24px;
             display: flex;
             flex-direction: row;
             align-self: center;
             align-content: center;
             gap: 24px;
+            /* justify-self: right; */
+
+
+        }
+
+        .headerSegmentRight{
+            align-content: center;
+            align-self: center;
+            align-content: center;
+
         }
 
         .siteLogo{
@@ -212,7 +235,7 @@
             
         }
 
-        .headerButton{
+        .headerButton, .headerButtonAllTime{
             padding: 0;
             margin: 0;
             font-family: 'Graphik-regular';
@@ -222,9 +245,20 @@
             text-align: center;
             background-color: transparent;
             border: none;
+            color: #26030a;
         }
 
-        .dropMenu{
+
+        .headerButtonAllTime{
+            justify-content: center;
+            justify-self: center;
+        }
+
+        .headerButton{
+            display: none;
+        }
+
+        .dropMenu, .dropMenuConvert{
             background-color: white;
             font-family: 'Graphik-regular';
             padding: 24px;
@@ -240,7 +274,15 @@
             position: fixed;
             left: 50%;
             transform: translateX(-50%);
+
+            /* background-color: rgba(0,0,0, 0.4);
+            backdrop-filter: blur(10px);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1); */
         }
+
+        .dropMenuConvert{width: 80%;}
+
         .menuRows{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -289,14 +331,14 @@
         .menutitle{
             margin: 0;
             padding: 0;
-            color: #161616;
+            color: #26030a;
             font-size: 13px;
         }
 
         .menuHeading{
             font-size: 14px;
             text-align: left;
-            color: rgb(112, 112, 120);
+            color: #8a235b;
             padding: 0;
             margin: 0;
             margin-bottom: 7px;
@@ -306,13 +348,13 @@
             visibility: visible;
         }
 
-        .headerButtonHolder{
+        .headerButtonHolder, .headerButtonHolderConvert{
             align-content: center;
             /* margin: 8px; */
             position: relative;
         }
 
-        .headerButtonHolder::after {
+        .headerButtonHolder::after , .headerButtonHolderConvert::after{
             content: '';
             position: absolute;
             top: 100%;
@@ -321,27 +363,77 @@
             height: 10px; /* Spans the gap to top: 65px */
             background: transparent;
         }
+        footer{
+            margin: 0;
+            padding: 0;
+        }
+     
+
+        .FooterDiv{
+            background-color: #8a235b;
+            margin: 0;
+            padding: 0;
+            display: grid;
+            padding: 24px;
+            grid-template-columns: repeat(2,1fr);
+        }
+
+        .FooterLeft{
+            margin: 0;
+            padding: 0;
+            color: #fff4f2;
+            font-family: 'Graphik-regular';
+            font-size: 12px;
+            text-align: left;
+            display: grid;
+            align-content: space-between;
+            justify-self: left;
+            justify-content: left;
+        }
+        .FooterRight{
+            margin: 0;
+            padding: 0;
+            justify-self: right;
+            justify-content: right;
+            text-align: right;
+            font-size: 10px;
+            
+            
+            color: #fff4f2;
+            font-family: 'Graphik-regular';
+            align-content: center;
+
+        }
+
+        .footertext{
+            margin: 0;
+
+        }
 
 
         @media (max-width:440px){
             .featuresHolder{grid-template-columns: repeat(1, 1fr);}
-
+            .headerButton{display: none;}
+            .mainTitle{font-size: 30px; line-height: 36px;}
+            .mainSubtitle{font-size: 14px;}
         }
 
         
         @media (441px <= width <= 640px){
             .featuresHolder{grid-template-columns: repeat(2, 1fr);}
-
+            .headerButton{display: none;}
+            .mainTitle{font-size: 32px; line-height: 42px; margin-bottom: 20px;}
+            .mainSubtitle{font-size: 15px;}
         }
 
         @media (960px <= width <= 1280px){
             .featuresHolder{grid-template-columns: repeat(4, 1fr);}
-
+            .headerButton{display: block};
         }
 
         @media (1281px <= width <= 1580px){
             .featuresHolder{grid-template-columns: repeat(5, 1fr);}
-
+            .headerButton{display: block};
         }
 
         @media (min-width:1581px){
@@ -349,11 +441,11 @@
             .feature{padding: 32px;}
             .title{font-size: 20px;}
             .description{font-size: 13px;}
-            .mainTitle{font-size: 42px; margin-bottom: 8px;}
+            .mainTitle{font-size: 42px;}
             .mainSubtitle{font-size: 22px;}
             .featureImg{width: 48px; height: 48px;}
             .bodyHolder{padding: 2px 48px;}
-
+            .headerButton{display: block};
 
         }
 
@@ -368,62 +460,91 @@
     <header>
         <div class="headerHolder">
             <img src="IMAGES\\Logo.svg" class="siteLogo">
-            
-            <div class="headerButtonHolder">
-                <button class="headerButton">ALL PDF TOOLS ⮷</button>
-                <div class="dropMenu">
-                    <div class="menuRows">
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">ORGANIZE PDF</h4>
-                            <div class="menuCol organizeCol">
-                                <!-- <div class="menuFeature ${features[i].subcatagory}"> 
-                                    <img src="${features[i].img}" class="menuImg">  
-                                    <h3 class="menutitle">${features[i].name}</h3>
-                                </div> -->
+
+            <div class="headerSegment">
+                <button class="headerButton">MERGE PDF</button>
+                <button class="headerButton">SPLIT PDF</button>
+                <button class="headerButton">COMPRESS PDF</button>
+
+                <div class="headerButtonHolderConvert">
+                    <button class="headerButton">CONVERT PDF</button>
+                    <div class="dropMenuConvert">
+                        <div class="menuRows">
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT TO PDF</h4>
+                                <div class="menuCol convertToPDFCol">
+                        
+                                </div>
                             </div>
-                        </div>
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">OPTIMIZE PDF</h4>
-                            <div class="menuCol optimizeCol">
-                                
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT FROM PDF</h4>
+                                <div class="menuCol convertFromPDFCol">
+                                    
+                                </div>
                             </div>
-                        </div>
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">CONVERT TO PDF</h4>
-                            <div class="menuCol convertToPDFCol">
-                    
+                            
                             </div>
-                        </div>
-                    
-                    <!-- <div class="menuRows"> -->
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">CONVERT FROM PDF</h4>
-                            <div class="menuCol convertFromPDFCol">
-                                
-                            </div>
-                        </div>
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">EDIT PDF</h4>
-                            <div class="menuCol editCol">
-                                
-                            </div>
-                        </div>
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">PDF SECURITY</h4>
-                            <div class="menuCol securityCol">
-                                
-                            </div>
-                        </div>
-                        <div class="menuColHolder">
-                            <h4 class="menuHeading">PDF INTELLIGENCE</h4>
-                            <div class="menuCol intelligenceCol">
-                                
-                            </div>
-                        </div>
-                    <!-- </div> -->
-                        </div>
+                    </div>
                 </div>
             </div>
+            <div class="headerSegmentRight">
+                <div class="headerButtonHolder">
+                    <button class="headerButtonAllTime">ALL PDF TOOLS ⮷</button>
+                    <div class="dropMenu">
+                        <div class="menuRows">
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">ORGANIZE PDF</h4>
+                                <div class="menuCol organizeCol">
+                                    <!-- <div class="menuFeature ${features[i].subcatagory}"> 
+                                        <img src="${features[i].img}" class="menuImg">  
+                                        <h3 class="menutitle">${features[i].name}</h3>
+                                    </div> -->
+                                </div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">OPTIMIZE PDF</h4>
+                                <div class="menuCol optimizeCol">
+                                    
+                                </div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT TO PDF</h4>
+                                <div class="menuCol convertToPDFCol">
+                        
+                                </div>
+                            </div>
+                        
+                        <!-- <div class="menuRows"> -->
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT FROM PDF</h4>
+                                <div class="menuCol convertFromPDFCol">
+                                    
+                                </div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">EDIT PDF</h4>
+                                <div class="menuCol editCol">
+                                    
+                                </div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">PDF SECURITY</h4>
+                                <div class="menuCol securityCol">
+                                    
+                                </div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">PDF INTELLIGENCE</h4>
+                                <div class="menuCol intelligenceCol">
+                                    
+                                </div>
+                            </div>
+                        <!-- </div> -->
+                            </div>
+                    </div>
+                </div>
+            </div>
+            
         </div>
     </header>
 
@@ -462,7 +583,18 @@
             </div>
         </div>
     </div>
-
+    <footer>
+        <div class="FooterDiv">
+            <div class="FooterLeft">
+                <p class="footertext">Made by Rapheal & Anael</p>
+                <p class="footertext">A project for HackClub</p>
+            </div>
+            <div class="FooterRight">
+                <p class="footertext">Meowwww</p>
+                <p class="footertext">(: (: (: (:</p>
+            </div>
+        </div>
+    </footer>
 
 
     
@@ -718,7 +850,7 @@
         }
 
 
-        function menuLoader(filter) {
+        function menuLoader(filter, parentdiv) {
             lenghtOFFeatures = features.length
             featuresHtml = ""
             if (filter){
@@ -751,7 +883,8 @@
             }
         }       
                 console.log(featuresHtml)
-                document.querySelector(`.${filter}Col`).innerHTML = featuresHtml
+                const alloption = document.querySelector(`.${parentdiv}`)
+                alloption.querySelector(`.${filter}Col`).innerHTML = featuresHtml
 
     }
 
@@ -773,15 +906,19 @@
 
 
 
-    menuLoader('organize')
-    menuLoader('optimize')
-    menuLoader('convertToPDF')
-    menuLoader('convertFromPDF')
-    menuLoader('edit')
-    menuLoader('security') 
-    menuLoader('intelligence')
+    menuLoader('organize',"dropMenu")
+    menuLoader('optimize', "dropMenu")
+    menuLoader('convertToPDF', "dropMenu")
+    menuLoader('convertFromPDF', "dropMenu")
+    menuLoader('edit', "dropMenu")
+    menuLoader('security', "dropMenu") 
+    menuLoader('intelligence', "dropMenu")
 
 
+    
+
+    menuLoader('convertToPDF', "dropMenuConvert")
+    menuLoader('convertFromPDF', "dropMenuConvert")
 
 
 
@@ -807,12 +944,22 @@
 
         const menuHeaderClose = document.querySelector('.headerButtonHolder')
         menuHeaderClose.addEventListener('mouseleave', () => {
-                
-         
                 document.querySelector('.dropMenu').classList.remove('dropShow')
             }
         );
 
+
+        // headerButtonHolderConvert
+        const menuHeader1 = document.querySelector('.headerButtonHolderConvert')
+        menuHeader1.addEventListener('mouseenter', () => {
+                document.querySelector('.dropMenuConvert').classList.add('dropShow')
+        });
+
+        const menuHeaderClose1 = document.querySelector('.headerButtonHolderConvert')
+        menuHeaderClose1.addEventListener('mouseleave', () => {
+                document.querySelector('.dropMenuConvert').classList.remove('dropShow')
+            }
+        );
 
      
         // const menu = document.querySelector('.dropMenu')
