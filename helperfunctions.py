@@ -1,5 +1,6 @@
 import os #file managment
 import zlib #decompression
+import re
 
 PDFPath = "Inputs/file-example_PDF_1MB.pdf"
 PDF = open(PDFPath, "rb") #rb is binary read mode
@@ -91,113 +92,103 @@ def readandDecompressStream(objectID):
     if objectID not in XrefTable:
         return b""
     PDF.seek(XrefTable[objectID])
-    objectData = PDF.read(8192)
 
-    streamStart = objectData.find(b"stream")
-    if streamStart == -1:
+    # read until we actually reach 'endstream' (no fixed 8192 cap)
+    data = b""
+    while b"endstream" not in data:
+        more = PDF.read(65536)
+        if not more:
+            break
+        data += more
+
+    m = re.search(rb"stream\r?\n", data)
+    if not m:
         return b""
+    header = data[:m.start()]
+    end = data.find(b"endstream", m.end())
+    raw = data[m.end():end if end != -1 else len(data)]
+    if raw.endswith(b"\r\n"): raw = raw[:-2]
+    elif raw.endswith(b"\n") or raw.endswith(b"\r"): raw = raw[:-1]
 
-    streamEnd = objectData.find(b"endstream", streamStart)
-
-    if objectData[streamStart + 6: streamStart + 8] == b"\r\n":
-        rawStart = streamStart + 8
-    else:
-        rawStart = streamStart + 7
-
-    rawBytes = objectData[rawStart:streamEnd].strip()
-
-    if b"/FlateDecode" in objectData[:streamStart]:
+    if b"/FlateDecode" in header:
         try:
-            return zlib.decompress(rawBytes)
-        except: 
+            return zlib.decompressobj().decompress(raw)   # tolerates trailing junk
+        except zlib.error:
             try:
-                return zlib.decompress(rawBytes, -zlib.MAX_WBITS)
-            except:
-                return rawBytes
-    return rawBytes
+                return zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw)
+            except zlib.error:
+                return raw
+    return raw
+
+import re
+
+def readObject(objID):
+    #Return the raw bytes of exactly one object (up to its endobj).
+    if objID not in XrefTable:
+        return b""
+    PDF.seek(XrefTable[objID])
+    data = b""
+    while b"endobj" not in data:
+        more = PDF.read(4096)
+        if not more:
+            break
+        data += more
+    return data.split(b"endobj")[0]
+
+def balancedDict(buf, start):
+    #buf[start:] begins with '<<'; return the full << ... >> including nesting.
+    depth, i = 0, start
+    while i < len(buf) - 1:
+        two = buf[i:i+2]
+        if two == b"<<":
+            depth += 1; i += 2
+        elif two == b">>":
+            depth -= 1; i += 2
+            if depth == 0:
+                return buf[start:i]
+        else:
+            i += 1
+    return buf[start:]
 
 def fontDictFinder(resBuffer):
-    fontcMaps = {} #Dictionary to store { "/F1": {cmap_dict}, "/F2": {cmap_dict} }
+    fontcMaps = {}
+    resBuffer = resBuffer.split(b"endobj")[0]      # never look past this object
 
-    fontPos = resBuffer.find(b"/Font")
-
-    if fontPos == -1:
+    m = re.search(rb"/Font\b", resBuffer)
+    if not m:
+        # we were given the page object: follow /Resources N 0 R
+        r = re.search(rb"/Resources\s+(\d+)\s+\d+\s+R", resBuffer)
+        if r:
+            return fontDictFinder(readObject(int(r.group(1))))
         return fontcMaps
 
-    fontSnippet = resBuffer[fontPos : fontPos + 300]
-    tokens = fontSnippet.split()
-
-    fontObjectBuffer = b""
-
-    #if the font dict is in form of another object(/Font 12 0 R)
-    if len(tokens) >= 4 and tokens[1].isdigit() and tokens[3] == b"R":
-        fontObjID = int(tokens[1].decode("latin1"))
-        if fontObjID in XrefTable:
-            PDF.seek(XrefTable[fontObjID])
-            fontObjectBuffer = PDF.read(2048)
-
-    #if it points to a direct dict
-    elif b"<<" in fontSnippet:
-        dictStart = resBuffer.find(b"<<", fontPos)
-        if dictStart != -1 and (dictStart - fontPos) < 20:
-            dictEnd = -1
-            depth = 0
-            i = int(dictStart)
-
-        #tracking nested << >> to isolate the entire /font dict
-        while i < len(resBuffer) - 1:
-            if resBuffer[i:i+2] == b"<<":
-                depth += 1
-                i += 2
-                continue
-            elif resBuffer[i:i+2] == b">>":
-                depth -= 1
-                if depth == 0:
-                    dictEnd = i + 2
-                    break
-                i += 2
-                continue
-            i += 1
-
-        if dictEnd != -1:
-            fontObjectBuffer = resBuffer[dictStart:dictEnd]
-
-    if not fontObjectBuffer:
+    rest = resBuffer[m.end():]
+    ref = re.match(rb"\s*(\d+)\s+\d+\s+R", rest)       # /Font 12 0 R
+    if ref:
+        rest = readObject(int(ref.group(1)))
+    start = rest.find(b"<<")                            # /Font << ... >>
+    if start == -1:
         return fontcMaps
+    inner = balancedDict(rest, start)[2:-2]
 
-    fontTokens = fontObjectBuffer.replace(b"<<", b" ").replace(b">>", b" ").split()
+    # entries are either  /F1 5 0 R   or an embedded  /F1 << ... >>
+    entry = re.compile(rb"(/[^\s/<>\[\]()]+)(?:\s+(\d+)\s+\d+\s+R|\s*(<<))")
+    pos = 0
+    while True:
+        e = entry.search(inner, pos)
+        if not e:
+            break
+        name = e.group(1).decode("latin1")
+        if e.group(2):
+            fontBuf = readObject(int(e.group(2)))
+            pos = e.end()
+        else:
+            fontBuf = balancedDict(inner, e.start(3))
+            pos = e.start(3) + len(fontBuf)
 
-    idx = 0
-    while idx < len(fontTokens):
-        tokenStr = fontTokens[idx].decode("latin1", errors="ignore")
-
-        # Find font identifiers like /F1, /F2, /TT1
-        if tokenStr.startswith("/"):
-            fontName = tokenStr
-
-            if (idx + 3 < len(fontTokens) and fontTokens[idx + 1].isdigit() and fontTokens[idx + 3] == b"R"
-            ):
-                fontObjID = int(fontTokens[idx + 1].decode("latin1"))
-
-                # Read individual Font Object to get its /ToUnicode stream
-                if fontObjID in XrefTable:
-                    PDF.seek(XrefTable[fontObjID])
-                    individualFontBuf = PDF.read(4096)
-
-                    toUnicodePos = individualFontBuf.find(b"/ToUnicode")
-                    if toUnicodePos != -1:
-                        tuTokens = individualFontBuf[toUnicodePos : toUnicodePos + 100].split()
-
-                        for tIdx, tuToken in enumerate(tuTokens):
-                            if (tuToken == b"/ToUnicode" and tIdx + 1 < len(tuTokens) and tuTokens[tIdx + 1].isdigit()):
-                                toUnicodeID = int(tuTokens[tIdx + 1].decode("latin1"))
-                                cmapBytes = readandDecompressStream(toUnicodeID)
-                                fontcMaps[fontName] = parseCmap(cmapBytes)
-                                break
-
-                idx += 3
-        idx += 1
-
+        tu = re.search(rb"/ToUnicode\s+(\d+)\s+\d+\s+R", fontBuf)
+        if tu:
+            fontcMaps[name] = parseCmap(readandDecompressStream(int(tu.group(1))))
     return fontcMaps
 
 #The version will then decide if decompression is needed.
@@ -415,6 +406,7 @@ def pagesParse(currentLocation):
                 resourceList = resourceLine.split() #This will get us the list of stuff around /resources. There the object id of resources would be written in the next index. We will use the Xreftabelo and object id to get the location of resources 
 
                 resourceObject = None
+                resourceObjectID = None
                 
                 for idx, token in enumerate(resourceList):
                         if token == b"/Resources" and idx + 1 < len(resourceList):
@@ -424,8 +416,7 @@ def pagesParse(currentLocation):
 
                 resBuffer = buffer
                 if resourceObjectID and resourceObjectID in XrefTable:
-                    PDF.seek(XrefTable[resourceObjectID])
-                    resBuffer = PDF.read(4096)
+                        resBuffer = readObject(resourceObjectID)     #PDF.read(4096)
 
                 #I have tried a lot to get the /ToUnicode but I can't find it anywehre in the file
                 #Before toUnicode, I need to go into each font F1, F2 etc
@@ -434,9 +425,8 @@ def pagesParse(currentLocation):
                 #if tounicode doesn't exist, check encoding
                 #if its named /Encoding decode using Latin1 
                 #if its named /Differences array, map glyph names to unicode
-
-
-                print(fontDictFinder(resBuffer))
+                
+                fontscMap = fontDictFinder(resBuffer) #This maps each font F1 F2 F5 etc to a dict with each value(but in hexadecimal). but I will do that at the end of the code.
 
                 cMap = {}
 
@@ -492,9 +482,9 @@ def pagesParse(currentLocation):
             nestedStreams = pagesParse(objectLocation)
             contentStreams.extend(nestedStreams)
 
-    return contentStreams #This gives us all the content 
+    return contentStreams, fontscMap #This gives us all the content 
 
-contentStreams = pagesParse(catalogObjectLocation) #contentstreams is a list so a for loop is needed
+contentStreams, fontscMap = pagesParse(catalogObjectLocation) #contentstreams is a list so a for loop is needed
 
 for contentStream in contentStreams:
     #Now we will find each stream of data and decode it using zlib
@@ -618,5 +608,7 @@ for contentStream in contentStreams:
     #Find /ToUnicode table 
     #parse the table into a dictionary in the format { "1D0B": "A", "0A": "e", ... } etc
     #To get the resources, I am adding code to the function which is already getting content
+
+    print(fontscMap)
 
 PDF.close()     
