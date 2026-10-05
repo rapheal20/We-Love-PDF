@@ -4,6 +4,202 @@ import zlib #decompression
 PDFPath = "Inputs/file-example_PDF_1MB.pdf"
 PDF = open(PDFPath, "rb") #rb is binary read mode
 
+#This function parses /Tounicode Cmap stream into a dictionary map {hex_code: unicode_char}
+def parseCmap(cmap_bytes):
+    cmap = {}
+    cmap_text = cmap_bytes.decode("latin1", errors="ignore")
+
+    # Parse beginbfchar ... endbfchar
+    bfchar_start = 0
+    while True:
+        pos = cmap_text.find("beginbfchar", bfchar_start)
+        if pos == -1:
+            break
+        end_pos = cmap_text.find("endbfchar", pos)
+        if end_pos == -1:
+            break
+
+        block = cmap_text[pos + 11 : end_pos].strip()
+        lines = block.splitlines()
+        for line in lines:
+            parts = [p.strip("<>") for p in line.split() if p.startswith("<")]
+            if len(parts) >= 2:
+                src_hex, dst_hex = parts[0].upper(), parts[1]
+                # Convert hex sequence to string
+                try:
+                    char_code = "".join(
+                        chr(int(dst_hex[j : j + 4], 16))
+                        for j in range(0, len(dst_hex), 4)
+                    )
+                    cmap[src_hex] = char_code
+                except ValueError:
+                    pass
+        bfchar_start = end_pos + 9
+
+    # Parse beginbfrange ... endbfrange
+    bfrange_start = 0
+    while True:
+        pos = cmap_text.find("beginbfrange", bfrange_start)
+        if pos == -1:
+            break
+        end_pos = cmap_text.find("endbfrange", pos)
+        if end_pos == -1:
+            break
+
+        block = cmap_text[pos + 12 : end_pos].strip()
+        lines = block.splitlines()
+        for line in lines:
+            parts = line.split()
+            if len(parts) >= 3:
+                src_start = parts[0].strip("<>").upper()
+                src_end = parts[1].strip("<>").upper()
+
+                if src_start and src_end:
+                    try:
+                        start_val = int(src_start, 16)
+                        end_val = int(src_end, 16)
+                        hex_len = len(src_start)
+
+                        # Range to single array: <srcStart> <srcEnd> [<dst1> <dst2>]
+                        if "[" in line:
+                            array_start = line.find("[")
+                            array_end = line.find("]")
+                            arr_tokens = [
+                                t.strip("<>")
+                                for t in line[array_start + 1 : array_end].split()
+                            ]
+                            for idx, val in enumerate(range(start_val, end_val + 1)):
+                                if idx < len(arr_tokens):
+                                    src_key = f"{val:0{hex_len}X}"
+                                    dst_hex = arr_tokens[idx]
+                                    cmap[src_key] = chr(int(dst_hex, 16))
+                        # Continuous sequence: <srcStart> <srcEnd> <dstStart>
+                        else:
+                            dst_start = parts[2].strip("<>")
+                            dst_val = int(dst_start, 16)
+                            for idx, val in enumerate(range(start_val, end_val + 1)):
+                                src_key = f"{val:0{hex_len}X}"
+                                cmap[src_key] = chr(dst_val + idx)
+                    except ValueError:
+                        pass
+        bfrange_start = end_pos + 10
+
+    return cmap
+
+#Fucntion which extracts and decompresses a PDF stream object
+def readandDecompressStream(objectID):
+    if objectID not in XrefTable:
+        return b""
+    PDF.seek(XrefTable[objectID])
+    objectData = PDF.read(8192)
+
+    streamStart = objectData.find(b"stream")
+    if streamStart == -1:
+        return b""
+
+    streamEnd = objectData.find(b"endstream", streamStart)
+
+    if objectData[streamStart + 6: streamStart + 8] == b"\r\n":
+        rawStart = streamStart + 8
+    else:
+        rawStart = streamStart + 7
+
+    rawBytes = objectData[rawStart:streamEnd].strip()
+
+    if b"/FlateDecode" in objectData[:streamStart]:
+        try:
+            return zlib.decompress(rawBytes)
+        except: 
+            try:
+                return zlib.decompress(rawBytes, -zlib.MAX_WBITS)
+            except:
+                return rawBytes
+    return rawBytes
+
+def fontDictFinder(resBuffer):
+    fontcMaps = {} #Dictionary to store { "/F1": {cmap_dict}, "/F2": {cmap_dict} }
+
+    fontPos = resBuffer.find(b"/Font")
+
+    if fontPos == -1:
+        return fontcMaps
+
+    fontSnippet = resBuffer[fontPos : fontPos + 300]
+    tokens = fontSnippet.split()
+
+    fontObjectBuffer = b""
+
+    #if the font dict is in form of another object(/Font 12 0 R)
+    if len(tokens) >= 4 and tokens[1].isdigit() and tokens[3] == b"R":
+        fontObjID = int(tokens[1].decode("latin1"))
+        if fontObjID in XrefTable:
+            PDF.seek(XrefTable[fontObjID])
+            fontObjectBuffer = PDF.read(2048)
+
+    #if it points to a direct dict
+    elif b"<<" in fontSnippet:
+        dictStart = resBuffer.find(b"<<", fontPos)
+        if dictStart != -1 and (dictStart - fontPos) < 20:
+            dictEnd = -1
+            depth = 0
+            i = int(dictStart)
+
+        #tracking nested << >> to isolate the entire /font dict
+        while i < len(resBuffer) - 1:
+            if resBuffer[i:i+2] == b"<<":
+                depth += 1
+                i += 2
+                continue
+            elif resBuffer[i:i+2] == b">>":
+                depth -= 1
+                if depth == 0:
+                    dictEnd = i + 2
+                    break
+                i += 2
+                continue
+            i += 1
+
+        if dictEnd != -1:
+            fontObjectBuffer = resBuffer[dictStart:dictEnd]
+
+    if not fontObjectBuffer:
+        return fontcMaps
+
+    fontTokens = fontObjectBuffer.replace(b"<<", b" ").replace(b">>", b" ").split()
+
+    idx = 0
+    while idx < len(fontTokens):
+        tokenStr = fontTokens[idx].decode("latin1", errors="ignore")
+
+        # Find font identifiers like /F1, /F2, /TT1
+        if tokenStr.startswith("/"):
+            fontName = tokenStr
+
+            if (idx + 3 < len(fontTokens) and fontTokens[idx + 1].isdigit() and fontTokens[idx + 3] == b"R"
+            ):
+                fontObjID = int(fontTokens[idx + 1].decode("latin1"))
+
+                # Read individual Font Object to get its /ToUnicode stream
+                if fontObjID in XrefTable:
+                    PDF.seek(XrefTable[fontObjID])
+                    individualFontBuf = PDF.read(4096)
+
+                    toUnicodePos = individualFontBuf.find(b"/ToUnicode")
+                    if toUnicodePos != -1:
+                        tuTokens = individualFontBuf[toUnicodePos : toUnicodePos + 100].split()
+
+                        for tIdx, tuToken in enumerate(tuTokens):
+                            if (tuToken == b"/ToUnicode" and tIdx + 1 < len(tuTokens) and tuTokens[tIdx + 1].isdigit()):
+                                toUnicodeID = int(tuTokens[tIdx + 1].decode("latin1"))
+                                cmapBytes = readandDecompressStream(toUnicodeID)
+                                fontcMaps[fontName] = parseCmap(cmapBytes)
+                                break
+
+                idx += 3
+        idx += 1
+
+    return fontcMaps
+
 #The version will then decide if decompression is needed.
 #1.4 or older are already written in plain ASCII text
 #Above that, it will be compressed with /FlatDecode
@@ -217,81 +413,69 @@ def pagesParse(currentLocation):
             if resourceIndex != -1: 
                 resourceLine = buffer[resourceIndex:].split(b"\n")[0]
                 resourceList = resourceLine.split() #This will get us the list of stuff around /resources. There the object id of resources would be written in the next index. We will use the Xreftabelo and object id to get the location of resources 
+
+                resourceObject = None
                 
-                for token in resourceList:
-                    if token.isdigit():
-                            resourceObject = int(token.decode("latin1"))
-                            break
-                
-                resourceObjectLocation = XrefTable[resourceObject]
+                for idx, token in enumerate(resourceList):
+                        if token == b"/Resources" and idx + 1 < len(resourceList):
+                            if resourceList[idx + 1].isdigit():
+                                resourceObjectID = int(resourceList[idx + 1].decode("latin1"))
+                                break
 
-                PDF.seek(resourceObjectLocation)
-                secondarybuffer = PDF.read(4096)
+                resBuffer = buffer
+                if resourceObjectID and resourceObjectID in XrefTable:
+                    PDF.seek(XrefTable[resourceObjectID])
+                    resBuffer = PDF.read(4096)
 
-                fontIndex = secondarybuffer.find(b"/Font") #Going to fonts
+                #I have tried a lot to get the /ToUnicode but I can't find it anywehre in the file
+                #Before toUnicode, I need to go into each font F1, F2 etc
+                #I need to follow the flowchart. 
+                #if to unicode exists, use cmap parser
+                #if tounicode doesn't exist, check encoding
+                #if its named /Encoding decode using Latin1 
+                #if its named /Differences array, map glyph names to unicode
 
-                if fontIndex != -1:
-                    fontSnippet = secondarybuffer[fontIndex : fontIndex + 100]
-                    fontTokens = fontSnippet.split()
 
-                    for idx, token in enumerate(fontTokens): #enumerate 
-                        if token == b"R" and idx >= 2:
-                            fontObject = int(fontTokens[idx - 2].decode("latin1"))
-                            fontObjectLocation = XrefTable[fontObject]
+                print(fontDictFinder(resBuffer))
 
-                            # Seek to actual Font Object
-                            PDF.seek(fontObjectLocation)
-                            secondarybuffer = PDF.read(4096)  # Read 4096 bytes for full Font Dict
-                            break
+                cMap = {}
 
-            # buffer right now has a nested dictionary which is storing each font object as F1 F2 etc
-            # Work for tomorrow
+                toUnicodeIndex = resBuffer.find(b"/ToUnicode")
             
-            toUnicodePosition = secondarybuffer.find(b"/ToUnicode")
-
-            if toUnicodePosition != -1:
-                lines = secondarybuffer[toUnicodePosition + 10 : toUnicodePosition + 60]
-
-                cmapObjectID = None
-                digitBytes = b""
-
-                for byte in lines:
-                    if 48 <= byte <= 57:  # ASCII 0-9
-                        digitBytes += bytes([byte])
-                    elif digitBytes:
-                        cmapObjectID = int(digitBytes.decode("latin1"))
-                        break
-
-                if cmapObjectID is not None:
-                    cmapLocation = XrefTable[cmapObjectID]
-                    PDF.seek(cmapLocation)
-                    cmapBuffer = PDF.read(4096)
-
-                    sStart = cmapBuffer.find(b"stream")
-                    sEnd = cmapBuffer.find(b"endstream", sStart)
-
-                    if sStart != -1 and sEnd != -1:
-                        if cmapBuffer[sStart + 6 : sStart + 8] == b"\r\n":
-                            rawDataStart = sStart + 8
-                        else:
-                            rawDataStart = sStart + 7
-
-                        rawBytes = cmapBuffer[rawDataStart:sEnd].strip()
-
-                        try:
-                            cmapText = zlib.decompress(rawBytes).decode("latin1", errors="ignore")
-                        except Exception:
-                            cmapText = zlib.decompress(rawBytes, -zlib.MAX_WBITS).decode("latin1", errors="ignore")
-
-                        print(cmapText)
-                    else:
-                        print(f"Could not find stream/endstream in Object {cmapObjectID}.")
+                if toUnicodeIndex != -1:
+                    toUnicodesnippet = resBuffer[toUnicodeIndex : toUnicodeIndex + 100].split()
+                    toUnicodeObjectID = None
+                    for idx, token in enumerate(toUnicodesnippet):
+                        if token == b"/ToUnicode" and idx + 1 < len(toUnicodesnippet):
+                            if toUnicodesnippet[idx + 1].isdigit():
+                                toUnicodeID = int(toUnicodesnippet[idx + 1].decode("latin1"))
+                                cmapBytes = readandDecompressStream(toUnicodeID)
+                                cMap = parseCmap(cmapBytes)
+                                break 
                 else:
-                    print("Could not parse object ID number after /ToUnicode.")
-            else:
-                print("No /ToUnicode reference found in this font object.")
-            
-            PDF.seek(objectLocation)
+                    encodingIndex = resBuffer.find(b"/Encoding")
+                    if encodingIndex != -1:
+                        encSnippet = resBuffer[encodingIndex: encodingIndex + 200]
+                        diffIndex = encSnippet.find(b"/Differences")
+                        if diffIndex != -1:
+                            diffStart = encSnippet.find(b"[", diffIndex)
+                            diffEnd = encSnippet.find(b"]", diffStart)
+                            if diffStart != -1 and diffEnd != -1:
+                                tokens = encSnippet[diffStart + 1:diffEnd].split()
+                                currCode = 0
+                                for token in tokens:
+                                    tStr = token.decode("latin1", errors="ignore")
+                                    if tStr.isdigit():
+                                        currCode = int(str)
+                                    elif tStr.startswith("/"):
+                                        glyphName = tStr[1:]
+                                        srckey = f"{currCode:02X}" #formats as 2 digit hexadecimal key
+                                        if len(glyphName) == "space":
+                                            cMap[srckey] = " "
+                                        elif glyphName == "space":
+                                            cMap[srckey] = " "
+                                        currCode += 1
+
             contents = buffer[contentIndex:].split(b"\n")[0] #This will get us the first line. eg b'/Contents 12 0 R'
             characters = contents.split()
             contentObjectID = int(characters[1].decode("latin1"))
