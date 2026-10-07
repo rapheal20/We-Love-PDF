@@ -98,6 +98,7 @@ def PDF_Clean(pdfData, pdfOffsetList):
         #Up until this point the code finds the Object ID from the dictionary of ids 
 
     Parent_Offset_Start = pdfOffsetList[ParentID]["Offset"]
+    ParentObjId = pdfOffsetList[ParentID]["OriginalID"]
 
     #find the endobj tag of the /Parent and then adds the original offset of /Parent as the end is from the start of the ParentOffset
     # for it to be right for the whole file it is added
@@ -122,7 +123,7 @@ def PDF_Clean(pdfData, pdfOffsetList):
             break
 
     Catalog_Offset_Start = pdfOffsetList[CatalogID]["Offset"]
-    Catalog_Offset_End = (re.search("endobj",pdf1String[Catalog_Offset_Start:])).end() + Catalog_Offset_Start
+    Catalog_Offset_End = (re.search("endobj",pdfData[Catalog_Offset_Start:])).end() + Catalog_Offset_Start
     xrefIndex = re.search("xref",pdfData).start()
 
     newBody = ""
@@ -140,7 +141,8 @@ def PDF_Clean(pdfData, pdfOffsetList):
 
     return {
         "Cleaned_Data" : newBody,
-        "PDF_Kids" : PDF_kids
+        "PDF_Kids" : PDF_kids,
+        "ParentID" : ParentObjId
     }
 
 
@@ -149,8 +151,6 @@ def PDF_Clean(pdfData, pdfOffsetList):
 Pdf1_highestID = max(
     list(dict1["OriginalID"] for dict1 in PDF1_Data)
 )
-
-
 
 PDF2_Data = []
 
@@ -162,16 +162,85 @@ for match in objectIDsPdf2:
         "Offset" : match.start()}
         )
 
+PDF1_Extract = PDF_Clean(pdf1String, PDF1_Data)
+PDF2_Extract = PDF_Clean(pdf2String, PDF2_Data)
 
 
 
-print(PDF2_Data)
+# print(PDF2_Data)
 '''
 FORMING NEW /PARENT OBJECT
 '''
 
 NewParentID = max(
-    list(dict1["OriginalID"] for dict1 in PDF2_Data)
+    list(dict1["NewID"] for dict1 in PDF2_Data)
 ) + 1
-print(NewParentID)
+# print(NewParentID)
+# print(PDF1_Extract["PDF_Kids"])
+# print(PDF2_Extract["PDF_Kids"])
+newKids = PDF1_Extract["PDF_Kids"]
+for kid in PDF2_Extract["PDF_Kids"]:
+    newKids.append(int(kid) + Pdf1_highestID)
+
+kidsStr = "/Kids[ "
+for i in newKids:
+   kidsStr += f"{i} 0 R " 
+kidsStr += "]"
+newParent = f'{NewParentID} 0 Obj\n<</Type/Pages\n' 
+newParent += f'{kidsStr}\n'  
+newParent += f'/Count {len(newKids)}>>\nendobj'
+
+
+
+
+
+
+
+# Changing the Pointing of OBJs to new parent
+oldParentStr = (f"/Parent {PDF1_Extract['ParentID']} 0 R")
+newParentStr = (f"/Parent {NewParentID} 0 R")
+body_edits =  str(PDF1_Extract["Cleaned_Data"])
+newBody = body_edits.replace(oldParentStr, newParentStr)
+# print(newBody)
+
+
+#Forming New Catalog
+newCatalog = f'{NewParentID+1} 0 Obj\n<</Type/Catalog/Pages {NewParentID+1} 0 R\n>>\nendobj' 
+# print(newCatalog)
+
+#PDF2 obj id change
+PDF2Str = str(PDF2_Extract["Cleaned_Data"])
+# print(PDF2Str)
+for object in PDF2_Data:
+
+    oldObjIds = rf'\b{object["OriginalID"]}\s+0\s+obj\b'
+    newObjIds = f'{object["NewID"]} 0 obj'
+    # print(oldObjIds, newObjIds)
+
+    
+
+    oldRefIds = f' {object["OriginalID"]} 0 R'
+    newRefIds = f' {object["NewID"]} 0 R'
+
+
+    PDF2Str = re.sub(
+        oldObjIds, 
+        newObjIds, 
+        PDF2Str, 
+        flags=re.IGNORECASE
+        )
+
+    # print((re.search(oldObjIds, PDF2Str, re.IGNORECASE)).start())
+    # print((re.search(oldObjIds, PDF2Str)))
+
+    # PDF2_newBody = PDF2Str.replace(oldObjIds, newObjIds)
+    # PDF2_newBody = PDF2_newBody.replace(oldRefIds, newRefIds)
+
+
+
+
+print(PDF2Str[:10000])
+# with open("pdf2Datareplace.txt" , "w", encoding="latin1") as file:
+#     file.write(PDF2_newBody)
+
 
