@@ -181,6 +181,7 @@ NewParentID = max(
 newKids = PDF1_Extract["PDF_Kids"]
 for kid in PDF2_Extract["PDF_Kids"]:
     newKids.append(int(kid) + Pdf1_highestID)
+print(PDF2_Extract["PDF_Kids"])
 
 kidsStr = "/Kids[ "
 for i in newKids:
@@ -189,6 +190,8 @@ kidsStr += "]"
 newParent = f'{NewParentID} 0 Obj\n<</Type/Pages\n' 
 newParent += f'{kidsStr}\n'  
 newParent += f'/Count {len(newKids)}>>\nendobj'
+print(newParent)
+
 
 # Changing the Pointing of OBJs to new parent
 oldParentStr = (f"/Parent {PDF1_Extract['ParentID']} 0 R")
@@ -206,26 +209,48 @@ newCatalog = f'{NewParentID+1} 0 Obj\n<</Type/Catalog/Pages {NewParentID+1} 0 R\
 PDF2Str = str(PDF2_Extract["Cleaned_Data"])
 lengthOfData = len(PDF2_Data)
 #looping in reverse to avaoid renumbering of the changed ids
-for index in range (lengthOfData-1, -1, -1):
+# for index in range (lengthOfData-1, -1, -1):
 
-    oldObjIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+obj\b'
-    newObjIds = f'{PDF2_Data[index]["NewID"]} 0 obj'
 
-    oldRefIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+R\b'
-    newRefIds = f'{PDF2_Data[index]["NewID"]} 0 R'
-    PDF2Str = re.sub(
-        oldObjIds, 
-        newObjIds, 
-        PDF2Str, 
-        flags=re.IGNORECASE
-        )
+#Making a mapping dict what has originalID as key and NewID as value
+mapping_Dict = {}
+for obj in PDF2_Data:
+    mapping_Dict[str(obj["OriginalID"])] = str(obj["NewID"])
 
-    PDF2Str = re.sub(
-        oldRefIds, 
-        newRefIds, 
-        PDF2Str, 
-        flags=re.IGNORECASE
-        )
+# print(mapping_Dict)
+
+def Obj_Declaration(match):
+    oldID = match.group(1)
+    newID = mapping_Dict.get(oldID, oldID)
+    return f'{newID} 0 obj'
+
+def Obj_Reference(match):
+    oldID = match.group(1)
+    newID = mapping_Dict.get(oldID, oldID)
+    return f'{newID} 0 R'
+
+PDF2Str = re.sub(r'\b(\d+)\s+0\s+obj\b', Obj_Declaration, PDF2Str, flags=re.IGNORECASE)
+PDF2Str = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Declaration, PDF2Str, flags=re.IGNORECASE)
+
+
+# oldObjIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+obj\b'
+# newObjIds = f'{PDF2_Data[index]["NewID"]} 0 obj'
+
+# oldRefIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+R\b'
+# newRefIds = f'{PDF2_Data[index]["NewID"]} 0 R'
+# PDF2Str = re.sub(
+#     oldObjIds, 
+#     newObjIds, 
+#     PDF2Str, 
+#     flags=re.IGNORECASE
+#     )
+
+# PDF2Str = re.sub(
+#     oldRefIds, 
+#     newRefIds, 
+#     PDF2Str, 
+#     flags=re.IGNORECASE
+#     )
 
 
 # print(PDF2_Edited)
@@ -241,5 +266,5 @@ PDF2_Final_Edit = PDF2Str.replace(oldParentStr2, newParentStr)
 #     file.write(PDF2Str)
 FinalPDFStr = PDF1_Final_Edit + PDF2_Final_Edit + newParent + newCatalog
 
-with open("pdfmerge.txt" , "w", encoding="latin1") as file:
-    file.write(FinalPDFStr)
+with open("pdf2test.txt" , "w", encoding="latin1") as file:
+    file.write(PDF2Str)
