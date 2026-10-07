@@ -83,7 +83,7 @@ def XrefTable(PDFPath):
 
     PDF.close()
 
-    return XrefTable
+    return XrefTable, XrefTableAddress
 
 #Returns the RootObjectID of the PDF
 def RootObjectID(PDFPath):
@@ -114,5 +114,3 @@ def RootObjectID(PDFPath):
 
     return RootObjectID
 
-def PagesCollector(PDFPath):
-    
