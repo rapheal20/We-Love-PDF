@@ -190,17 +190,11 @@ newParent = f'{NewParentID} 0 Obj\n<</Type/Pages\n'
 newParent += f'{kidsStr}\n'  
 newParent += f'/Count {len(newKids)}>>\nendobj'
 
-
-
-
-
-
-
 # Changing the Pointing of OBJs to new parent
 oldParentStr = (f"/Parent {PDF1_Extract['ParentID']} 0 R")
 newParentStr = (f"/Parent {NewParentID} 0 R")
 body_edits =  str(PDF1_Extract["Cleaned_Data"])
-newBody = body_edits.replace(oldParentStr, newParentStr)
+PDF1_Final_Edit = body_edits.replace(oldParentStr, newParentStr)
 # print(newBody)
 
 
@@ -210,19 +204,15 @@ newCatalog = f'{NewParentID+1} 0 Obj\n<</Type/Catalog/Pages {NewParentID+1} 0 R\
 
 #PDF2 obj id change
 PDF2Str = str(PDF2_Extract["Cleaned_Data"])
-# print(PDF2Str)
-for object in PDF2_Data:
+lengthOfData = len(PDF2_Data)
+#looping in reverse to avaoid renumbering of the changed ids
+for index in range (lengthOfData-1, -1, -1):
 
-    oldObjIds = rf'\b{object["OriginalID"]}\s+0\s+obj\b'
-    newObjIds = f'{object["NewID"]} 0 obj'
-    # print(oldObjIds, newObjIds)
+    oldObjIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+obj\b'
+    newObjIds = f'{PDF2_Data[index]["NewID"]} 0 obj'
 
-    
-
-    oldRefIds = f' {object["OriginalID"]} 0 R'
-    newRefIds = f' {object["NewID"]} 0 R'
-
-
+    oldRefIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+R\b'
+    newRefIds = f'{PDF2_Data[index]["NewID"]} 0 R'
     PDF2Str = re.sub(
         oldObjIds, 
         newObjIds, 
@@ -230,17 +220,26 @@ for object in PDF2_Data:
         flags=re.IGNORECASE
         )
 
-    # print((re.search(oldObjIds, PDF2Str, re.IGNORECASE)).start())
-    # print((re.search(oldObjIds, PDF2Str)))
+    PDF2Str = re.sub(
+        oldRefIds, 
+        newRefIds, 
+        PDF2Str, 
+        flags=re.IGNORECASE
+        )
 
-    # PDF2_newBody = PDF2Str.replace(oldObjIds, newObjIds)
-    # PDF2_newBody = PDF2_newBody.replace(oldRefIds, newRefIds)
+
+# print(PDF2_Edited)
+
+oldParentStr2 = (f"/Parent {PDF2_Extract['ParentID']} 0 R")
+# newParentStr = (f"/Parent {NewParentID} 0 R")
+# body2_edits =  str(PDF2_Extract["Cleaned_Data"])
+PDF2_Final_Edit = PDF2Str.replace(oldParentStr2, newParentStr)
 
 
-
-
-print(PDF2Str[:10000])
+    
 # with open("pdf2Datareplace.txt" , "w", encoding="latin1") as file:
-#     file.write(PDF2_newBody)
+#     file.write(PDF2Str)
+FinalPDFStr = PDF1_Final_Edit + PDF2_Final_Edit + newParent + newCatalog
 
-
+with open("pdfmerge.txt" , "w", encoding="latin1") as file:
+    file.write(FinalPDFStr)
