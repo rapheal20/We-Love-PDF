@@ -48,6 +48,8 @@ while chr(buffer[countIndex+index+7]) not in delimiterList:
     numberOfPages += chr(buffer[countIndex+index+7])
     index += 1
 
+numberOfPages = int(numberOfPages)
+
 pagesData = []
 
 #This is the stuff I need to store for each page.
@@ -56,7 +58,7 @@ pageEntry = {"pageIndex": 0, #index
              "objectID": (0, 0), #[ID, Generation]
              "inheritedAttributes": {"MediaBox": [0, 0, 0, 0], "Rotate": 0 }, #Just extract
              "directReferences": {"contents": [0], "resources": 6}, #Objet ID for /Contents streams, Object ID for /Resources 
-             "dependencyIds": [0, 0, 0, 0] #list of all child Object IDs
+             "dependencyIDs": [0, 0, 0, 0] #list of all child Object IDs
              }
 '''
              
@@ -177,11 +179,11 @@ def pageParser(currentLocation):
 
             dependencies = dependencyCollecter(pageID)
 
-            pageEntry = {"pageIndex": len(pagesData), #index
+            pageEntry = {"pageIndex": len(pagesData) + 1, #index
              "objectID": [pageID, pageGen], #[ID, Generation]
              "inheritedAttributes": {"MediaBox": MediaBoxList, "Rotate": Rotate}, #Just extract
              "directReferences": {"contents": contentObjectID, "resources": resourcesObjectID}, #Objet ID for /Contents streams, Object ID for /Resources 
-             "dependencyIds": dependencies #list of all child Object IDs
+             "dependencyIDs": dependencies #list of all child Object IDs
             }
             
             pagesData.append(pageEntry)
@@ -200,4 +202,106 @@ pageParser(catalogObjectLocation) #This will make the list pagesData which will 
 #lastly build the new xreftable and trailer
 #These steps will be done for both of the division
 
-PDF.close() 
+#user input of number number. The splitPage will go into the second part.
+splitPage = 3 
+#Index starts at 1
+part1Index = splitPage - 1
+part2Index = numberOfPages 
+
+part1Pages = pagesData[:part1Index]
+part2Pages = pagesData[part1Index:part2Index]
+
+#I will now get the objects needed for each part. I amd doing for part 1
+requiredObjectIDS = set() #using datatype set so the list doesn't have repeated values 
+pageObjectIDs = []
+
+#These two are the starting 2 objects. After that the objects will be named from 3
+catalogID = 1
+pagesID = 2
+nextID = 3
+
+#Track mapped IDs: maps original page object IDs to new renumbered IDs
+idMap = {}
+pageRefs = []
+allDependencies = set()
+targetPageIDS = []
+
+for page in part1Pages:
+    pageID = page["objectID"][0]
+    targetPageIDS.append(pageID)
+    idMap[pageID] = nextID
+    pageRefs.append(f"{nextID} 0 R")
+    allDependencies.update(page["dependencyIDs"])
+
+    nextID += 1
+
+dependencyIDsToMap = []
+
+#This code is excluding the pages themselves from the dependency list
+for dependencyID in allDependencies:
+    if dependencyID not in part1Pages:
+        dependencyIDsToMap.append(dependencyID)
+
+for pageID in dependencyIDsToMap:
+    if pageID not in idMap:
+        idMap[pageID] = nextID
+        nextID += 1
+
+newXrefTable = {}
+
+sortedOffsets = sorted(set(newXrefTable.values()))
+
+#Join all kis with a space
+kidsArrayStr = " ".join(pageRefs)
+pageCount = len(part1Pages)
+
+#Generating /Catalog Object
+catalogBytes = (
+    f"{catalogID} 0 obj\n" 
+    f"<<\n" 
+    f"  /Type /Catalog\n"
+    f"  /Pages {pagesID} 0 R\n"
+    f">>\n"
+    f"endobj\n"
+    ).encode("latin1")
+
+#Generating the /Pages Root object 
+pagesBytes = (
+    f"{pagesID} 0 obj\n"
+    f"<<\n"
+    f"  /Type /Pages\n"
+    f"  /Count {pageCount}\n"
+    f"  /Kids [ {kidsArrayStr} ]\n"
+    f">>\n"
+    f"endobj\n"
+    ).encode("latin1")
+
+with open("Outputs//WeLovePDF_Split.pdf", "wb") as outputPDF:
+    #standard header
+    header = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"
+    outputPDF.write(header)
+
+    #writing /catalog which is object 1
+    newXrefTable[1] = outputPDF.tell()
+    outputPDF.write(catalogBytes)
+
+    #writing /pages root which is object 2
+    newXrefTable[2] = outputPDF.tell()
+    outputPDF.write(pagesBytes)
+
+    #These are patternf for object extraction and ref replacements
+    objectRefPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
+    parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
+
+    #This function updates the objectIDs inside object headers and refs
+    def replaceRef(match):
+        refID = int(match.group(1))
+        generationNumber = match.group(2)
+        if refID in idMap:
+            return f"{idMap[refID]} {generationNumber.decode('latin1')} R".encode('latin1')
+        return match.group(0)
+
+    #processing all objects now 
+    allOldIDsToWrite = targetPageIDS + dependencyIDsToMap
+
+PDF.close()  
