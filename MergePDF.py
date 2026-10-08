@@ -4,7 +4,7 @@ The function will take the pdfs from inputs folder and a dict which will have fi
 Then it will READ the pdfs in the order and WRITE to a new file
 '''
 import re
-
+from helperfunctions import XrefTable
 pdf2 = "Inputs\\file-example_PDF_1MB.pdf"
 pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
 
@@ -39,15 +39,18 @@ NewID is only in the PDF 2 data
 
 '''
 
+#Header Make
 
-
-
-# with open("pdfData2.txt" , "w", encoding="latin1") as file:
-#     file.write(pdf1String)
+HeaderStr = r"%PDF-(\d+\.\d+)" 
+headermatch = re.search(HeaderStr, pdf1String)
+# print(headermatch)
+if headermatch:
+    version = headermatch.group(0)
+PDFheader = version + "\n%âãÏÓ\n"
 
 
 # #finding the object ids
-objectFindString = r"(\d+)\s(\d+)\sobj" 
+objectFindString = r"\b(\d+)\s(\d+)\sobj" 
 
 #the paranthesis divide it into groups so tha twe can later access the id directly
 # with () we can use the .group command on it 
@@ -70,24 +73,13 @@ for match in objectIDsPdf1:
         "Offset" : match.start()}
         )
 
-
-
-# <</Type/Pages this is the unique tag of /Parent, so it finds the location of that from the file 
-# next it finds its starting offset 
-# then iterates through the Offset dictionary and finds the offset just bigger then it, once it finds it, that index is saved as i - 1
-# this way the acutal starting index of the /Parent is founf
-# then it searches for endobj, as .search finds the first value so this way when starting from the offset the end of /Parent is found
-# that is added into the offset adn this way the whole parent object can be selected
-#returns
-
-
-
 #the following function removes the /Parent and /Catalog from a PDF file
 def PDF_Clean(pdfData, pdfOffsetList):
     #Remove Header
     startIndex = pdfOffsetList[0]["Offset"]
 
     #Remove /Parent
+    # <</Type/Pages this is the unique tag of /Parent, so it finds the location of that from the file and its offset
     ParentTagOffset = (re.search("<</Type/Pages", pdfData)).start() #It searches for header obj and stores its byte offset
 
     for i in range (len(pdfOffsetList)):
@@ -116,12 +108,14 @@ def PDF_Clean(pdfData, pdfOffsetList):
 
     CatalogTagOffset = (re.search("<</Type/Catalog/Pages",pdfData)).start()
 
+    # then iterates through the Offset dictionary and finds the offset just bigger then it, once it finds it, that index is saved as i - 1
     for i in range (len(pdfOffsetList)):
         offset = pdfOffsetList[i]["Offset"]
         if offset > CatalogTagOffset:
             CatalogID = i-1
             break
 
+    # this way the acutal starting index of the /Parent is founf
     Catalog_Offset_Start = pdfOffsetList[CatalogID]["Offset"]
     Catalog_Offset_End = (re.search("endobj",pdfData[Catalog_Offset_Start:])).end() + Catalog_Offset_Start
     xrefIndex = re.search("xref",pdfData).start()
@@ -145,8 +139,14 @@ def PDF_Clean(pdfData, pdfOffsetList):
         "ParentID" : ParentObjId
     }
 
+# Function for Changing the Parent of each OBJ
+def ParentIDChange(PDFdata, NewParentID):
+    newParentStr = (f"/Parent {NewParentID} 0 R")
+    PDFStr = str(PDFdata["Cleaned_Data"])
+    oldParentStr = (f"/Parent {PDFdata['ParentID']} 0 R")
+    PDFStr = PDFStr.replace(oldParentStr, newParentStr)
+    return PDFStr
 
-# print(PDF_Clean(pdf1String))
 
 Pdf1_highestID = max(
     list(dict1["OriginalID"] for dict1 in PDF1_Data)
@@ -165,9 +165,6 @@ for match in objectIDsPdf2:
 PDF1_Extract = PDF_Clean(pdf1String, PDF1_Data)
 PDF2_Extract = PDF_Clean(pdf2String, PDF2_Data)
 
-
-
-# print(PDF2_Data)
 '''
 FORMING NEW /PARENT OBJECT
 '''
@@ -175,49 +172,34 @@ FORMING NEW /PARENT OBJECT
 NewParentID = max(
     list(dict1["NewID"] for dict1 in PDF2_Data)
 ) + 1
-# print(NewParentID)
-# print(PDF1_Extract["PDF_Kids"])
-# print(PDF2_Extract["PDF_Kids"])
+
 newKids = PDF1_Extract["PDF_Kids"]
 for kid in PDF2_Extract["PDF_Kids"]:
     newKids.append(int(kid) + Pdf1_highestID)
-print(PDF2_Extract["PDF_Kids"])
+# print(PDF2_Extract["PDF_Kids"])
 
 kidsStr = "/Kids[ "
 for i in newKids:
    kidsStr += f"{i} 0 R " 
 kidsStr += "]"
-newParent = f'{NewParentID} 0 Obj\n<</Type/Pages\n' 
+newParent = f'\n{NewParentID} 0 obj\n<</Type/Pages\n' 
 newParent += f'{kidsStr}\n'  
-newParent += f'/Count {len(newKids)}>>\nendobj'
-print(newParent)
+newParent += f'/Count {len(newKids)}>>\nendobj\n'
+# print(newParent)
 
 
-# Changing the Pointing of OBJs to new parent
-oldParentStr = (f"/Parent {PDF1_Extract['ParentID']} 0 R")
-newParentStr = (f"/Parent {NewParentID} 0 R")
-body_edits =  str(PDF1_Extract["Cleaned_Data"])
-PDF1_Final_Edit = body_edits.replace(oldParentStr, newParentStr)
-# print(newBody)
 
+
+PDF1_Final_Edit = ParentIDChange(PDF1_Extract, NewParentID)     #Changing PDF1 Parent
+PDF2Str = ParentIDChange(PDF2_Extract, NewParentID)     #Changing PDF2 Parent
 
 #Forming New Catalog
-newCatalog = f'{NewParentID+1} 0 Obj\n<</Type/Catalog/Pages {NewParentID+1} 0 R\n>>\nendobj' 
-# print(newCatalog)
-
-#PDF2 obj id change
-PDF2Str = str(PDF2_Extract["Cleaned_Data"])
-lengthOfData = len(PDF2_Data)
-#looping in reverse to avaoid renumbering of the changed ids
-# for index in range (lengthOfData-1, -1, -1):
-
+newCatalog = f'\n{NewParentID+1} 0 obj\n<</Type/Catalog/Pages {NewParentID} 0 R\n>>\nendobj' 
 
 #Making a mapping dict what has originalID as key and NewID as value
 mapping_Dict = {}
 for obj in PDF2_Data:
     mapping_Dict[str(obj["OriginalID"])] = str(obj["NewID"])
-
-# print(mapping_Dict)
 
 def Obj_Declaration(match):
     oldID = match.group(1)
@@ -230,41 +212,64 @@ def Obj_Reference(match):
     return f'{newID} 0 R'
 
 PDF2Str = re.sub(r'\b(\d+)\s+0\s+obj\b', Obj_Declaration, PDF2Str, flags=re.IGNORECASE)
-PDF2Str = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Declaration, PDF2Str, flags=re.IGNORECASE)
+PDF2Str = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Reference, PDF2Str, flags=re.IGNORECASE)
 
-
-# oldObjIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+obj\b'
-# newObjIds = f'{PDF2_Data[index]["NewID"]} 0 obj'
-
-# oldRefIds = rf'\b{PDF2_Data[index]["OriginalID"]}\s+0\s+R\b'
-# newRefIds = f'{PDF2_Data[index]["NewID"]} 0 R'
-# PDF2Str = re.sub(
-#     oldObjIds, 
-#     newObjIds, 
-#     PDF2Str, 
-#     flags=re.IGNORECASE
-#     )
-
-# PDF2Str = re.sub(
-#     oldRefIds, 
-#     newRefIds, 
-#     PDF2Str, 
-#     flags=re.IGNORECASE
-#     )
-
-
-# print(PDF2_Edited)
-
-oldParentStr2 = (f"/Parent {PDF2_Extract['ParentID']} 0 R")
-# newParentStr = (f"/Parent {NewParentID} 0 R")
-# body2_edits =  str(PDF2_Extract["Cleaned_Data"])
-PDF2_Final_Edit = PDF2Str.replace(oldParentStr2, newParentStr)
-
-
-    
 # with open("pdf2Datareplace.txt" , "w", encoding="latin1") as file:
 #     file.write(PDF2Str)
-FinalPDFStr = PDF1_Final_Edit + PDF2_Final_Edit + newParent + newCatalog
 
-with open("pdf2test.txt" , "w", encoding="latin1") as file:
-    file.write(PDF2Str)
+FinalPDFStr = PDFheader + PDF1_Final_Edit + PDF2Str + newParent + newCatalog
+
+# print(FinalPDFStr)
+xrefDict = {}
+xrefTableMatch = re.finditer(objectFindString, FinalPDFStr, flags=re.IGNORECASE)
+for match in xrefTableMatch:
+    xrefDict[int(match.group(1))] = match.start()
+
+
+
+numberOfObj = max(xrefDict.keys())
+print(numberOfObj)
+# print(xrefDict)
+xrefStr = f"\n\nxref\n0 {numberOfObj+1}\n0000000000 65535 f\n"
+# numberOfObj +1
+for i in range(1,numberOfObj +1):
+    try:
+        if xrefDict[i]:
+            idLen = len(str(xrefDict[i]))
+            finalstr = str(xrefDict[i])
+            for j in range(10-idLen):
+                finalstr = "0" + finalstr
+            finalstr +=  " 00000 n \n"
+            xrefStr += finalstr
+        else:
+            xrefStr += "0000000000 65535 f \n"
+    except:
+        xrefStr += "0000000000 65535 f \n"
+
+
+
+# print(xrefStr)
+
+#Trailer
+concludedFile = FinalPDFStr + xrefStr
+byteOffset = (re.search("xref", concludedFile, flags=re.IGNORECASE)).start()
+
+trailer = f"\ntrailer\n<<\n/Size {numberOfObj +1}\n/Root {NewParentID+1} 0 R\n>>\nstartxref\n{byteOffset}\n%%EOF"
+# print(trailer)
+
+
+finalPDF = concludedFile + trailer
+
+# with open("pdffinal.txt" , "w", encoding="latin1") as file:
+#     file.write(finalPDF)
+
+
+encodedPDF = finalPDF.encode("latin1")
+with open("pdfffff333.pdf" , "wb") as file:
+    file.write(encodedPDF)
+
+# xref1, xref2 = (XrefTable("pdf333.pdf"))
+
+# print(xref1, xref2)
+
+
