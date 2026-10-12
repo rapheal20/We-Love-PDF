@@ -1,3 +1,8 @@
+#Anael - I started the project through this function in order to gain understanding of how the PDF works.
+#I managed to make the whole function but the issue was that I was trying to load a PDF into the terminal or variable 
+#which simply wasn't possible cuz PDF is a html type of format
+#so the function is kind of incomplete but still left as is. 
+
 import os #file managment
 import zlib #decompression
 import re

@@ -4,10 +4,10 @@ We love PDF is a complete recreation of the website I LOVE PDF. It is being code
 To make this challenging, we will not use any libraries except default python ones. We will do direct implementation of libraries such as PyPDF2 by reading their source code.
 
 The features implemented will be: 
-1. Merge PDF 
-2. Split PDF
-3. Compress PDF 
-4. PDF to Word 
+1. Merge PDF (Done by Rapheal)
+2. Split PDF (Done by Anael)
+3. Compress PDF (Work in progress by Rapheal)
+4. PDF to Word (work in progress by Anael)
 5. PDF to PowerPoint 
 6. PDF to Excel
 7. Word to PDF 

@@ -3,7 +3,7 @@ import os
 delimiterList = [" ", "\n", "\r", ">", "/"]
 
 #Returns PDF version
-def PDFVersion(PDFPath):
+def PDFVersionFunc(PDFPath):
     PDF = open(PDFPath, "rb")
     PDFVersion = PDF.readline()
     PDFVersion = PDFVersion.decode('latin1').strip()
@@ -14,7 +14,7 @@ def PDFVersion(PDFPath):
     return PDFVersion
 
 #Returns XrefTable of the PDF
-def XrefTable(PDFPath):
+def XrefTableFunc(PDFPath):
     PDF = open(PDFPath, "rb")
     PDFSize = os.path.getsize(PDFPath) - 1
 
@@ -86,7 +86,7 @@ def XrefTable(PDFPath):
     return XrefTable, XrefTableAddress
 
 #Returns the RootObjectID of the PDF
-def RootObjectID(PDFPath):
+def RootObjectIDFunc(PDFPath):
     PDF = open(PDFPath, "rb")
     PDFSize = os.path.getsize(PDFPath) - 1
 
