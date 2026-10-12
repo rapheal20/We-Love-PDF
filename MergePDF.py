@@ -39,7 +39,7 @@ def Merge_PDF(pdf1, pdf2):
     pdf1String = pdf1Data.decode("latin1") 
     pdf2String = pdf2Data.decode("latin1")
     #finding the object ids
-    objectFindString = r"\b(\d+)\s(\d+)\sobj" 
+    objectFindString = r"\b(\d+)\s+(\d+)\s+obj" 
     '''
     the paranthesis divide it into groups so tha twe can later access the id directly
     with () we can use the .group command on it 
