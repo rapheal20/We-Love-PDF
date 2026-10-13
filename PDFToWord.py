@@ -90,7 +90,15 @@ def PDFToWord(PDFPath):
                 contentObjectLocation = XrefTable[contentObjectID]
 
                 PDF.seek(contentObjectLocation)
-                contentBuffer = PDF.read(4096)
+
+                #get exact length of object: It sorts the Xreftable by the byte offsets in ascending order. Then find the next object and subtract.
+                sortedOffsets = sorted(set(XrefTable.values()))
+                sortedOffsets.append(XrefTableAddress)
+                currentIndex = sortedOffsets.index(contentObjectLocation)
+                endOffset = sortedOffsets[currentIndex + 1]
+                objectLength = endOffset - contentObjectLocation
+
+                contentBuffer = PDF.read(objectLength)
 
                 #Step 3 onwards, implementation is unique for the work
                 streamPattern = re.compile(rb'stream\r?\n(.*?)\s*endstream', re.DOTALL)
@@ -103,14 +111,46 @@ def PDFToWord(PDFPath):
                 except:
                     decompressedStreamData = streamData
 
+                print(decompressedStreamData)
                 #Parsing all text operators (BT TJ Tj ET)
+                '''
+                BT = start text
+                ET = end text 
+                Tf = fonts 
+                Td TD = next line 
+                Tj = text string
+                TJ = text from array 
+                '''
                 textBlockPattern = re.compile(rb'\bBT\b(.*?)\bET\b', re.DOTALL)
-                tjPattern = re.compile(rb'\((.*?)\)\s*Tj|<([0-9A-Fa-f]+)>\s*Tj')
-                tjArrayPattern = re.compile(rb'\[(.*?)\]\s*TJ', re.DOTALL) #Also called TJ
+                TDPattern = re.compile(rb'(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(Td|TD)')
 
                 textBlocks = textBlockPattern.findall(decompressedStreamData)
-                
-                print(textBlocks)
+
+                extractedElements = []
+
+                for block in textBlocks:
+                    TDcommands = re.findall(rb'(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(Td|TD)', block)
+                    for cmd in TDcommands:
+                        xCoordinate = float(cmd[0])
+                        yCoordinate = float(cmd[1])
+                        extractedElements.append({"type": "position", "dx": xCoordinate, "dy": yCoordinate})
+
+                    newlineCommands = re.findall(rb'\bT\*\b', block)
+                    for _  in newlineCommands:
+                        extractedElements.append({"type": "newline"})
+
+                    TjCommands = re.findall(rb'\((.*?)\)\s*(Tj|\'|\")', block, re.DOTALL)
+                    for cmd in TjCommands:
+                        textBytes = cmd[0]
+                        textContent = textBytes.decode("latin1")
+                        extractedElements.append({"type": "text", "content": textContent})
+                        
+                    TJArrayCommands = re.findall(rb'\[(.*?)\]\s*TJ', block, re.DOTALL)
+                    for cmd in TJArrayCommands:
+                        innerStrings = re.findall(rb'\((.*?)\)', cmd, re.DOTALL)
+                        for s in innerStrings:
+                            textContent = s.decode('latin1')
+                            extractedElements.append({"type": "text", "content": textContent})
 
             elif subkidsIndex != -1:
                 pageParser(pageLocation)
