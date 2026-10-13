@@ -13,3 +13,4 @@ The working of the SplitPDF is:
 7. Creates the new Xreftable in byte form, trailer in byte form, header in byte form
 8. Everything in 6 and 7 is then written to the new export file
 
+Coded by Anael

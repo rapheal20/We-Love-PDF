@@ -1,7 +1,7 @@
 ## We love PDF
 We love PDF is a complete recreation of the website I LOVE PDF. It is being coded by Anael and Rapheal. 
 
-To make this challenging, we will not use any libraries except default python ones. We will do direct implementation of libraries such as PyPDF2 by reading their source code.
+To make this challenging, we will not use any libraries except default python ones. We will do direct implementation of libraries such as PyPDF2 by editing the PDF source code.
 
 The features implemented will be: 
 1. Merge PDF (Done by Rapheal)
