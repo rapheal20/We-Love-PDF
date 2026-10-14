@@ -19,6 +19,7 @@ BASIC DESIGN CHOICES
 - here we use .finditer instead of .findall as .finditer waits for one of the ouputs to worked on and then moves on to the next so memery efficint
 '''
 import re
+from helperfunctions import Make_Header, Make_Xref, PDF_ID_Remap
 
 
 pdf2 = "Inputs\\file-example_PDF_1MB.pdf"
@@ -90,7 +91,7 @@ def Merge_PDF(pdf1, pdf2):
     catalogObj = f'\n{ParentID+1} 0 obj\n<</Type/Catalog/Pages {ParentID} 0 R\n>>\nendobj' 
 
     #remapping th eids of PDF2 to the new ids
-    PDF2_Final = PDF_ID_Remap(PDF2_Data, PDF2_Final)
+    PDF2_Final = PDF_ID_Remap(PDF2_Data, PDF2_Final, "OriginalID")
 
     #making new header
     headerObj = Make_Header(pdf1String)
@@ -115,18 +116,6 @@ def Merge_PDF(pdf1, pdf2):
     encodedPDF = CombinePDFStr.encode("latin1")
     with open("Outputs\\WeLovePDF_Merged.pdf" , "wb") as file:
         file.write(encodedPDF)
-
-
- 
-# Makes new header object
-def Make_Header(pdfString):
-    # this function takes a pdf decoded in latin1
-    HeaderStr = r"%PDF-(\d+\.\d+)" 
-    headermatch = re.search(HeaderStr, pdfString)
-    version = headermatch.group(0)
-    #these series of characters are added to tell that the pdf to read character like \n for new line
-    PDFheader = version + "\n%âãÏÓ\n"
-    return PDFheader
 
 #the following function removes the /Parent and /Catalog from a PDF file
 def PDF_Clean(pdfData, pdfOffsetList):
@@ -226,59 +215,8 @@ def Make_Parent(PDF1_Extract_Clean, PDF2_Extract_Clean, PDF2_Data, IncrementID):
 
     return newParent, NewParentID
 
-#remaps the ids of PDF2 with the new incremented ids
-def PDF_ID_Remap(PDF2_Data, PDF2String):
-    #Making a mapping dict what has originalID as key and NewID as value
-    mapping_Dict = {}
-    for obj in PDF2_Data:
-        mapping_Dict[str(obj["OriginalID"])] = str(obj["NewID"])
-
-    def Obj_Declaration(match):
-        oldID = match.group(1)
-        newID = mapping_Dict.get(oldID, oldID)
-        return f'{newID} 0 obj'
-
-    def Obj_Reference(match):
-        oldID = match.group(1)
-        newID = mapping_Dict.get(oldID, oldID)
-        return f'{newID} 0 R'
-
-    PDF2String = re.sub(r'\b(\d+)\s+0\s+obj\b', Obj_Declaration, PDF2String, flags=re.IGNORECASE)
-    PDF2String = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Reference, PDF2String, flags=re.IGNORECASE)
-    return PDF2String
-
-#makes the xref table with formatting as a string
-def Make_Xref(objectFindString, FinalPDFStr):
-
-    #makes a dictionary with object id as key and offset as value
-    xrefDict = {}
-    xrefTableMatch = re.finditer(objectFindString, FinalPDFStr, flags=re.IGNORECASE)
-    for match in xrefTableMatch:
-        xrefDict[int(match.group(1))] = match.start()
-
-    #finds the number of objects in the combines pdf
-    numberOfObj = max(xrefDict.keys())
-    #adds a free object at start
-    xrefStr = f"\n\nxref\n0 {numberOfObj+1}\n0000000000 65535 f\n"
-    #iterates through all the possible object ids and adds them, if no obj at an id adds a free object
-    for i in range(1,numberOfObj +1):
-        try:
-            if xrefDict[i]:
-                idLen = len(str(xrefDict[i]))
-                finalstr = str(xrefDict[i])
-                for j in range(10-idLen):
-                    finalstr = "0" + finalstr
-                finalstr +=  " 00000 n \n"
-                xrefStr += finalstr
-            else:
-                xrefStr += "0000000000 65535 f \n"
-        except:
-            xrefStr += "0000000000 65535 f \n"
-    return xrefStr, numberOfObj
-
-
 
 pdf3 = "Inputs\\DataRepresentation2k26.pdf"
 pdf4 = "Inputs\\TranslatorsNew.pdf"
-Merge_PDF(pdf3, pdf4)
+# Merge_PDF(pdf3, pdf4)
 
