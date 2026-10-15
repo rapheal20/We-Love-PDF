@@ -24,98 +24,101 @@ from helperfunctions import Make_Header, Make_Xref, PDF_ID_Remap
 
 pdf2 = "Inputs\\file-example_PDF_1MB.pdf"
 pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
-
+pdf3 = "Inputs\\emaar.pdf"
 
 
 def Merge_PDF(pdf1, pdf2):
-    #rb mode is for read only in binary mode
-    #opening file 1
-    with open(pdf1, "rb") as file:
-        pdf1Data = file.read()
-    #opening file 2
-    with open(pdf2, "rb") as file:
-        pdf2Data = file.read()
-    #pdfData now holds the bytes of the pdf, these are the objects
-    #this converts the raw binary into string charaters but it maintains the character ratio so the calculated offset will be correct
-    pdf1String = pdf1Data.decode("latin1") 
-    pdf2String = pdf2Data.decode("latin1")
-    #finding the object ids
-    objectFindString = r"\b(\d+)\s+(\d+)\s+obj" 
-    '''
-    the paranthesis divide it into groups so tha twe can later access the id directly
-    with () we can use the .group command on it 
-    .group(0) gives the whole match 
-    .group(1) gives the first bracket 
-    .group(2) gives the second bracket
-    + sign here signifies or more digits so this allows for multiple digit ids
-    .start() gives the byte offset which can also be taken from span[0]
-    '''
-    
-    '''###### OBJECT EXTRACTION FOR PDF 1 ######'''
-    #main list for PDF1
-    PDF1_Data = [] 
-    objectIDsPdf1 = re.finditer(objectFindString, pdf1String)
-    #Finds the orginalIDs and Offsets and appends into the main List
-    for match in objectIDsPdf1:
-        PDF1_Data.append(
-            {"OriginalID" : int(match.group(1)),
-            "Offset" : match.start()}
-            )
+    try:
+        #rb mode is for read only in binary mode
+        #opening file 1
+        with open(pdf1, "rb") as file:
+            pdf1Data = file.read()
+        #opening file 2
+        with open(pdf2, "rb") as file:
+            pdf2Data = file.read()
+        #pdfData now holds the bytes of the pdf, these are the objects
+        #this converts the raw binary into string charaters but it maintains the character ratio so the calculated offset will be correct
+        pdf1String = pdf1Data.decode("latin1") 
+        pdf2String = pdf2Data.decode("latin1")
+        #finding the object ids
+        objectFindString = r"\b(\d+)\s+(\d+)\s+obj" 
+        '''
+        the paranthesis divide it into groups so tha twe can later access the id directly
+        with () we can use the .group command on it 
+        .group(0) gives the whole match 
+        .group(1) gives the first bracket 
+        .group(2) gives the second bracket
+        + sign here signifies or more digits so this allows for multiple digit ids
+        .start() gives the byte offset which can also be taken from span[0]
+        '''
+        
+        '''###### OBJECT EXTRACTION FOR PDF 1 ######'''
+        #main list for PDF1
+        PDF1_Data = [] 
+        objectIDsPdf1 = re.finditer(objectFindString, pdf1String)
+        #Finds the orginalIDs and Offsets and appends into the main List
+        for match in objectIDsPdf1:
+            PDF1_Data.append(
+                {"OriginalID" : int(match.group(1)),
+                "Offset" : match.start()}
+                )
 
-    #Finds the highest object ID of PDF 1
-    Pdf1_highestID = max(list(dict1["OriginalID"] for dict1 in PDF1_Data))
+        #Finds the highest object ID of PDF 1
+        Pdf1_highestID = max(list(dict1["OriginalID"] for dict1 in PDF1_Data))
 
-    '''###### OBJECT EXTRACTION FOR PDF 2 ######'''
-    #main list for PDF2
-    PDF2_Data = []
-    objectIDsPdf2 = re.finditer(objectFindString, pdf2String)
-    #Finds the orginalIDs and Offsets and appends into the main List
-    for match in objectIDsPdf2:
-        PDF2_Data.append(
-            {"OriginalID" : int(match.group(1)),
-            "NewID" : int(match.group(1))+Pdf1_highestID,
-            "Offset" : match.start()}
-            )
-    #this addes the Highest ID of PDF 1 into all the object ids of PDF 2 to avoid any repetition
+        '''###### OBJECT EXTRACTION FOR PDF 2 ######'''
+        #main list for PDF2
+        PDF2_Data = []
+        objectIDsPdf2 = re.finditer(objectFindString, pdf2String)
+        #Finds the orginalIDs and Offsets and appends into the main List
+        for match in objectIDsPdf2:
+            PDF2_Data.append(
+                {"OriginalID" : int(match.group(1)),
+                "NewID" : int(match.group(1))+Pdf1_highestID,
+                "Offset" : match.start()}
+                )
+        #this addes the Highest ID of PDF 1 into all the object ids of PDF 2 to avoid any repetition
 
 
-    '''###### CLEANING THE PDF FILES (REMOVES /PARENT & /CATALOG) ######'''
-    PDF1_Extract = PDF_Clean(pdf1String, PDF1_Data)
-    PDF2_Extract = PDF_Clean(pdf2String, PDF2_Data)
+        '''###### CLEANING THE PDF FILES (REMOVES /PARENT & /CATALOG) ######'''
+        PDF1_Extract = PDF_Clean(pdf1String, PDF1_Data)
+        PDF2_Extract = PDF_Clean(pdf2String, PDF2_Data)
 
-    '''###### MAKING & INITIALIZING THE NEW PARENT & CATALOG OBJECT ######'''
-    parentObj , ParentID = Make_Parent(PDF1_Extract, PDF2_Extract, PDF2_Data, Pdf1_highestID)
-    PDF1_Final = ParentIDChange(PDF1_Extract, ParentID)     #Changing PDF1 Parent
-    PDF2_Final = ParentIDChange(PDF2_Extract, ParentID)     #Changing PDF2 Parent
-    #making new catalog
-    catalogObj = f'\n{ParentID+1} 0 obj\n<</Type/Catalog/Pages {ParentID} 0 R\n>>\nendobj' 
+        '''###### MAKING & INITIALIZING THE NEW PARENT & CATALOG OBJECT ######'''
+        parentObj , ParentID = Make_Parent(PDF1_Extract, PDF2_Extract, PDF2_Data, Pdf1_highestID)
+        PDF1_Final = ParentIDChange(PDF1_Extract, ParentID)     #Changing PDF1 Parent
+        PDF2_Final = ParentIDChange(PDF2_Extract, ParentID)     #Changing PDF2 Parent
+        #making new catalog
+        catalogObj = f'\n{ParentID+1} 0 obj\n<</Type/Catalog/Pages {ParentID} 0 R\n>>\nendobj' 
 
-    #remapping th eids of PDF2 to the new ids
-    PDF2_Final = PDF_ID_Remap(PDF2_Data, PDF2_Final, "OriginalID")
+        #remapping th eids of PDF2 to the new ids
+        PDF2_Final = PDF_ID_Remap(PDF2_Data, PDF2_Final, "OriginalID")
 
-    #making new header
-    headerObj = Make_Header(pdf1String)
+        #making new header
+        headerObj = Make_Header(pdf1String)
 
-    #forms a string of the new header, pd1, pdf2, parent and catalog object
-    CombinePDFStr = headerObj + PDF1_Final + PDF2_Final + parentObj + catalogObj
+        #forms a string of the new header, pd1, pdf2, parent and catalog object
+        CombinePDFStr = headerObj + PDF1_Final + PDF2_Final + parentObj + catalogObj
 
-    #making xref table
-    xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
+        #making xref table
+        xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
 
-    #merging Combined PDF with xref
-    CombinePDFStr += xreftable
+        #merging Combined PDF with xref
+        CombinePDFStr += xreftable
 
-    #making trailer
-    byteOffset = (re.search("xref", CombinePDFStr, flags=re.IGNORECASE)).start()
-    trailerObj = f"\ntrailer\n<<\n/Size {ObjNumber +1}\n/Root {ParentID+1} 0 R\n>>\nstartxref\n{byteOffset}\n%%EOF"
+        #making trailer
+        byteOffset = (re.search("xref", CombinePDFStr, flags=re.IGNORECASE)).start()
+        trailerObj = f"\ntrailer\n<<\n/Size {ObjNumber +1}\n/Root {ParentID+1} 0 R\n>>\nstartxref\n{byteOffset}\n%%EOF"
 
-    #Final string file
-    CombinePDFStr += trailerObj
+        #Final string file
+        CombinePDFStr += trailerObj
 
-    #encoding it back into latin1
-    encodedPDF = CombinePDFStr.encode("latin1")
-    with open("Outputs\\WeLovePDF_Merged.pdf" , "wb") as file:
-        file.write(encodedPDF)
+        #encoding it back into latin1
+        encodedPDF = CombinePDFStr.encode("latin1")
+        with open("Outputs\\WeLovePDF_Merged.pdf" , "wb") as file:
+            file.write(encodedPDF)
+    except:
+        print("Error")
 
 #the following function removes the /Parent and /Catalog from a PDF file
 def PDF_Clean(pdfData, pdfOffsetList):
@@ -216,7 +219,7 @@ def Make_Parent(PDF1_Extract_Clean, PDF2_Extract_Clean, PDF2_Data, IncrementID):
     return newParent, NewParentID
 
 
-pdf3 = "Inputs\\DataRepresentation2k26.pdf"
-pdf4 = "Inputs\\TranslatorsNew.pdf"
-# Merge_PDF(pdf3, pdf4)
+# pdf3 = "Inputs\\DataRepresentation2k26.pdf"
+# pdf4 = "Inputs\\TranslatorsNew.pdf"
+Merge_PDF(pdf1, pdf3)
 

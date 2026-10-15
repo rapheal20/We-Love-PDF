@@ -6,7 +6,7 @@ To make this challenging, we will not use any libraries except default python on
 The features implemented will be: 
 1. Merge PDF (Done by Rapheal)
 2. Split PDF (Done by Anael)
-3. Compress PDF (Work in progress by Rapheal)
+3. Compress PDF (Done by Rapheal)
 4. PDF to Word (work in progress by Anael)
 5. PDF to PowerPoint 
 6. PDF to Excel
@@ -14,7 +14,7 @@ The features implemented will be:
 8. PowerPoint to PDF
 9. Excel to PDF
 10. Edit PDF 
-11. PDF to JPG
+11. PDF to JPG (work in progres by Rapheal)
 12. JPG to PDF 
 13. Sign PDF 
 14. Watermark 
