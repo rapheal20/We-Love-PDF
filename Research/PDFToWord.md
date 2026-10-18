@@ -16,3 +16,9 @@ The docs converter works by extracting all the text, layout and structural eleme
 8. Create the docx file that has its own structure (will mention later)
 
 Till step 2/3, the code can somewhat be repeated from the SplitPDF function. 
+
+
+# Fonts/CMap table:
+I have gotten all the details including the text content as hex. It needs to be translated into actual character using the CMap table. To get the table. I will get /Resources dict which has the /fonts dict where all the fonts are mapped like /F1. Then ill read the Cmap table and parse. Some of this code has already been written by me in the ReadPDF.py 
+
+I might use python docx. It is used to read, create and update word files. This is cuz a docs file is actually a zip with a lot of xml files and stuff. I think trying to make mysef would be too hard. 

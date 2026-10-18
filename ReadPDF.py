@@ -7,6 +7,7 @@ import os #file managment
 import zlib #decompression
 import re
 
+
 def PDFreader(PDFPath):
     PDF = open(PDFPath, "rb") #rb is binary read mode
 
