@@ -52,8 +52,54 @@ if PageCount != len(Kids_List):
     # replaces the subParents with the new pages list
     Kids_List = KidPages
 
-print(Kids_List)
+# print(Kids_List)
 
 
 # print(PageCount)
 # print(Kids_List)
+
+#extracting content from each page
+
+'''
+PDF_Pages = {
+    215 : {
+        'ObjectID' : 215,
+        'Body' : ... , 
+        'ContentRefs' : []
+        'ResourcesRefs' : []
+        }
+    }
+'''
+
+PDF_Pages = {}
+objectEndString = r"\bendobj"
+for Kid_ID in Kids_List:
+    # print(Kids_List)
+    # print(Kid1)
+    StartOffset = (re.search(fr"{Kid_ID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+    EndOffset = (re.search(objectEndString, PDF_Data[StartOffset:], flags=re.IGNORECASE)).end() + StartOffset
+    PDF_Pages[Kid_ID] = {
+        'ObjectID' : Kid_ID,
+        "Body" : PDF_Data[StartOffset: EndOffset]
+    }
+
+# print(PDF_Pages)
+
+PDF_Pages_List = list(PDF_Pages.values())
+for KidObj in PDF_Pages_List:
+    #Content Ref
+    Content_Ref_List = []
+    ObjBody = (KidObj['Body'])
+
+    ContentStartStr = r"\s*/\s*Contents\s*["
+    ContentStart = (re.search(r"\s*/\s*Contents\s*[", ObjBody, flags=re.IGNORECASE))
+    ContentEnd = (re.search("]", KidObj['Body'][ContentStart:], flags=re.IGNORECASE)).start() + ContentStart
+    ContentSelected = KidObj['Body'][ContentStart:ContentEnd]
+    ContentRefs = re.finditer(KidsFindString, ContentSelected, flags=re.IGNORECASE)
+    for Ref in ContentRefs:
+        Content_Ref_List.append(int(Ref.group(1)))
+
+    print(Content_Ref_List)
+
+    break
+
