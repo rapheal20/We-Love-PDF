@@ -1,4 +1,7 @@
 import re
+import zlib
+from io import BytesIO
+
 
 
 pdf3 = "Inputs\\emaar.pdf"
@@ -39,7 +42,7 @@ PageCount = (re.search(PageCountString, ParentBody, flags=re.IGNORECASE)).group(
 if PageCount != len(Kids_List): 
     KidPages = []
     for kidID in Kids_List:
-        SubParents = re.finditer(fr"{kidID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)   
+        SubParents = re.finditer(fr"\b{kidID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)   
         for  SubParent in SubParents:
             SubParentOffset = SubParent.start()
             #uses ] instead of endobj to ensure only the kids are picked and not any other references
@@ -52,13 +55,30 @@ if PageCount != len(Kids_List):
     # replaces the subParents with the new pages list
     Kids_List = KidPages
 
-# print(Kids_List)
-
-
-# print(PageCount)
-# print(Kids_List)
-
 #extracting content from each page
+
+def Reference_Find(KidObject, RefType):
+    #RefType 1 for /Contents
+    #RefType 2 for /Resources
+
+    if RefType == 1:
+        ContentStartStr = r"\s*/\s*Contents\s*"
+    elif RefType == 0:
+        ContentStartStr = r"\s*/\s*Resources\s*"
+
+    Ref_List = []
+    ObjBody = (KidObject['Body'])
+
+    Start = (re.search(ContentStartStr, ObjBody, flags=re.IGNORECASE)).end()
+    End = (re.search(r"/", ObjBody[Start:], flags=re.IGNORECASE)).start() + Start
+    Selected = KidObject['Body'][Start:End]
+    ContentRefs = re.finditer(KidsFindString, Selected, flags=re.IGNORECASE)
+    for Ref in ContentRefs:
+        Ref_List.append(int(Ref.group(1)))
+    return Ref_List
+
+
+
 
 '''
 PDF_Pages = {
@@ -74,32 +94,70 @@ PDF_Pages = {
 PDF_Pages = {}
 objectEndString = r"\bendobj"
 for Kid_ID in Kids_List:
-    # print(Kids_List)
-    # print(Kid1)
-    StartOffset = (re.search(fr"{Kid_ID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+    StartOffset = (re.search(fr"\b{Kid_ID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
     EndOffset = (re.search(objectEndString, PDF_Data[StartOffset:], flags=re.IGNORECASE)).end() + StartOffset
     PDF_Pages[Kid_ID] = {
         'ObjectID' : Kid_ID,
         "Body" : PDF_Data[StartOffset: EndOffset]
     }
 
-# print(PDF_Pages)
-
 PDF_Pages_List = list(PDF_Pages.values())
 for KidObj in PDF_Pages_List:
-    #Content Ref
-    Content_Ref_List = []
-    ObjBody = (KidObj['Body'])
+    
+    # Content Ref
+    Content_Ref_List = Reference_Find(KidObj, 1)
+    PDF_Pages[KidObj['ObjectID']]["Content"] = Content_Ref_List
 
-    ContentStartStr = r"\s*/\s*Contents\s*["
-    ContentStart = (re.search(r"\s*/\s*Contents\s*[", ObjBody, flags=re.IGNORECASE))
-    ContentEnd = (re.search("]", KidObj['Body'][ContentStart:], flags=re.IGNORECASE)).start() + ContentStart
-    ContentSelected = KidObj['Body'][ContentStart:ContentEnd]
-    ContentRefs = re.finditer(KidsFindString, ContentSelected, flags=re.IGNORECASE)
-    for Ref in ContentRefs:
-        Content_Ref_List.append(int(Ref.group(1)))
+for ContentObj in PDF_Pages_List:
+    ContentList = ContentObj['Content']
+    for ContentID in ContentList:
+        ContentStart = (re.search(fr"\b{ContentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+        ContentEnd = (re.search(objectEndString, PDF_Data[ContentStart:], flags=re.IGNORECASE)).end() + ContentStart
+        ContentBody = PDF_Data[ContentStart:ContentEnd]
+        FilterFind = re.search(r"\s*/\s*Filter\s*", ContentBody, flags=re.IGNORECASE)
 
-    print(Content_Ref_List)
+        # /Filter/FlateDecode
+        #checks if there is a filter or not
+        if FilterFind:
+            FlateDecodeFilter = re.search(r"\s*/\s*FlateDecode\s*", ContentBody, flags=re.IGNORECASE)
+            if FlateDecodeFilter:
+                # finds the start of stream
+                StreamStart = (re.search(r"\s*stream\s*", ContentBody, flags=re.IGNORECASE)).end()
+                #find the end of stream
+                StreamEnd = (re.search(r"\s*endstream\s*", ContentBody, flags=re.IGNORECASE)).start()
+                # Slices and selects just the stream
+                StreamSelect = ContentBody[StreamStart:StreamEnd]
+                # encodes the stream from string to latin1
+                StreamSelect = StreamSelect.encode('latin1')
+                # decompresses the stream
+                decompressedStreams = zlib.decompress(StreamSelect)
+                # converts it into string
+                StringStream = decompressedStreams.decode('latin1')
+                # Seperates each line into a list
+                StreamLines = StringStream.split("\n")
 
+
+
+                # for line in StreamLines:
+
+                ''''''
+
+
+
+                break
+
+            break
+        break
     break
+
+
+
+
+
+    
+    
+    # print(ContentList)
+    # break
+
+
 
