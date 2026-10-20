@@ -22,3 +22,33 @@ Till step 2/3, the code can somewhat be repeated from the SplitPDF function.
 I have gotten all the details including the text content as hex. It needs to be translated into actual character using the CMap table. To get the table. I will get /Resources dict which has the /fonts dict where all the fonts are mapped like /F1. Then ill read the Cmap table and parse. Some of this code has already been written by me in the ReadPDF.py 
 
 I might use python docx. It is used to read, create and update word files. This is cuz a docs file is actually a zip with a lot of xml files and stuff. I think trying to make mysef would be too hard. 
+
+# Images 
+Images are also inside the resources for each page. I need to find the /XObject dict for each page. There it will have a /Subtype /Image object. Then I can use my read and decompress stream funct to get the raw bytes of the image. 
+If the image has /DCTDecode its a jpeg file 
+if the image is /FlateDecode its raw pixel data which we can convert using PIL. (This is a library)
+Then getting all the pics I can insert them into the doc with dc.add_picture()
+Xobject is this: /XObject<</Im13 13 0 R>>. lm13 is the local resource name. 13 is the object ID. 
+Going to the Image offset will give us the image: 
+b'13 0 obj\n<</Type/XObject/Subtype/Image/Width 2160 /Height 1441 /BitsPerComponent 8 /ColorSpace/DeviceRGB/Filter/DCTDecode/Length 373393>>\nstream\n\xff\xd8\xff\xe0\x00\x10JFIF...'
+
+
+# Regular expression symbols
+1. Ordinary Characters stay the same eg a z 5
+2. Special Symbols:
+    - . (dot): matches any single character except a newline
+    - ^ (caret): matches start of a string
+    - $ (dollar): matches end of a string
+    - | (pipe): Acts as an OR operator
+3. Repetions:
+    - *: 0 or more times
+    - +: one or more times
+    - ?: 0 or one time (optional)
+    - {n, m}: between n and m times
+4. character classes:
+    - [aeiou]: matches any single vowel
+    - [^aeiou]: matches anything except a vowel
+    - \d: matches any digit 
+    - \w: matches any character (letter, numbers, underscore)
+    - \s: matches any whitescape (spaces, tabs, newlines) 
+

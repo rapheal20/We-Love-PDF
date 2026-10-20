@@ -19,70 +19,64 @@ def XrefTableFunc(PDFPath):
     PDF = open(PDFPath, "rb")
     PDFSize = os.path.getsize(PDFPath) - 1
 
-    bufferSize = min(1024, PDFSize)
+    bufferSize = min(4096, PDFSize)
 
     PDF.seek(PDFSize - bufferSize)
     buffer = PDF.read()
 
-    startXrefAddressPosition = buffer.find(b"startxref")
-    EndXrefAddressPositon = startXrefAddressPosition + 10
+    startXref = re.search(rb'startxref\s*(\d+)', buffer)
 
-    XrefTableAddress = ""
-    
-    cursor = EndXrefAddressPositon 
-    while cursor < bufferSize:
-        currentByte = chr(buffer[cursor])
-        if currentByte in delimiterList:
-            break
-        XrefTableAddress += currentByte
-        cursor += 1
-
-    XrefTableAddress = int(XrefTableAddress)
+    XrefTableAddress = int(startXref.group(1))
     PDF.seek(XrefTableAddress)
 
-    rawXrefTableTrailer = PDF.read()
-    rawXrefTable = rawXrefTableTrailer.split(b'trailer')[0]
+    rawXrefData = PDF.read(PDFSize - XrefTableAddress)
 
     XrefTable = {}
 
-    rows = rawXrefTable.decode('latin1').splitlines()
+    #Two type for xreftable: modern (/Type/XRef) or traditional
+    if b"/Type/XRef" in rawXrefData or b"/Type /XRef" in rawXrefData:
+        pass
 
-    i = 0
-    
-    while i < len(rows):
-        row = rows[i].strip()
-        parts = row.split() #Getting each part
+    lines = rawXrefData.decode('latin1').splitlines()
 
-        if row.lower() == 'xref' or not row: #This targets row 0
-            i += 1
+    currentID = 0
+    count = 0
+    parsingEntries = False
+    entryIndex = 0
+
+    for line in lines:
+        line = line.strip()
+        if not line or line.lower() == 'trailer':
+            if line.lower() == 'trailer':
+                break
             continue
 
-        if row.lower() == 'trailer':
-            break
+        if line.lower() == 'xref':
+            parsingEntries = True
+            continue
 
-        if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit(): #This targets row 1
-            currentID = int(parts[0])
-            count = int(parts[1])
+        if parsingEntries:
+            headerMatch = re.match(r'^(\d+)\s+(\d+)$', line)
+            if headerMatch:
+                currentID = int(headerMatch.group(1))
+                count = int(headerMatch.group(2))
+                entryIndex = 0
+                continue
 
-            for rowNumber in range(count): 
-                i += 1 #moving to row 3 now
+            entryMatch = re.match(r'^(\d+)\s+(\d+)\s+([fn])$', line)
+            if entryMatch and entryIndex < count:
+                offset = int(entryMatch.group(1))
+                status = entryMatch.group(3)
                 
-                if i >= len(rows):
-                    break
-
-                entryRow = rows[i].strip() 
-                entryParts = entryRow.split()
-
-                if len(entryParts) >= 3:
-                    status = entryParts[2]
-                    if status == 'n':
-                        offset = int(entryParts[0])
-                        XrefTable[currentID] = offset
-
-                    currentID += 1
-        i += 1
+                if status == 'n':
+                    XrefTable[currentID] = offset
+                
+                currentID += 1
+                entryIndex += 1
 
     PDF.close()
+
+    print(XrefTable)
 
     return XrefTable, XrefTableAddress
 
@@ -91,29 +85,22 @@ def RootObjectIDFunc(PDFPath):
     PDF = open(PDFPath, "rb")
     PDFSize = os.path.getsize(PDFPath) - 1
 
-    bufferSize = min(1024, PDFSize)
+    bufferSize = min(4096, PDFSize)
 
     PDF.seek(PDFSize - bufferSize)
     buffer = PDF.read()
 
-    startRootObjectIDPosition = buffer.find(b"/Root")
-    EndRootObjectIDPositon = startRootObjectIDPosition + 6
+    rootObject = re.search(rb'/Root\s+(\d+)\s+\d+\s+R', buffer)
 
-    RootObjectID = ""
+    if rootObject:
+        return int(rootObject.group(1))
+
+    rootobjectAlt = re.search(rb'/Root\s+(\d+)', buffer)
+
+    if rootobjectAlt:
+        return int(rootobjectAlt.group(1))
     
-    cursor = EndRootObjectIDPositon 
-    while cursor < bufferSize:
-        currentByte = chr(buffer[cursor])
-        if currentByte in delimiterList:
-            break
-        RootObjectID += currentByte
-        cursor += 1
-
-    RootObjectID = int(RootObjectID)
-
     PDF.close()
-
-    return RootObjectID
 
 
 

@@ -8,6 +8,7 @@ from helperfunctions import *
 from docx import Document 
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from PIL import Image
 
 def PDFToWord(PDFPath):
     PDF = open(PDFPath, "rb")
@@ -49,6 +50,30 @@ def PDFToWord(PDFPath):
             numberOfPages = 0
     else:
         numberOfPages = 0
+
+    def imageDictFinder(XObjectOffset):
+        images = [] 
+
+        PDF.seek(XObjectOffset)
+        imgBuffer = PDF.read()
+        imagePattern = rb"(\d+\s+\d+\s+obj\s*<<.*?(?:/Subtype\s*/Image).*?>>\s*stream\r?\n)(.*?)(?:\r?\nendstream)"
+        imageBytesArray = re.findall(imagePattern, imgBuffer, re.DOTALL)
+
+        for index, array in enumerate(imageBytesArray):
+            imageHeader = array[0]
+            imageBytes = array[1]
+
+            imageID = re.search(rb"\d+", imageHeader).group().decode()
+
+            imageWidth = re.search(rb"/Width\s+(\d+) ", imageHeader).group(1).decode()
+            imageHeight = re.search(rb"/Height\s+(\d+)", imageHeader).group(1).decode()
+
+            imageFilter =  re.search(rb"/Filter\s*/([A-Za-z0-9]+)", imageHeader).group(1).decode()
+
+            imageDict = {"imageID": imageID, "imageWidth": imageWidth, "imageHeight": imageHeight, "imageBytes": imageBytes}
+            images.append(imageDict)
+
+            return images
 
     #This function parses /Tounicode Cmap stream into a dictionary map {hex_code: unicode_char}. Copied from ReadPDF.py
     def parseCmap(cmapBytes):
@@ -274,7 +299,6 @@ def PDFToWord(PDFPath):
                 fontcMaps[name] = parseCmap(readandDecompressStream(int(tu.group(1))))
         return fontcMaps
 
-
     allElements = []
 
     def pageParser(currentLocation):
@@ -353,6 +377,18 @@ def PDFToWord(PDFPath):
                     resBuffer = buffer
                     if resourceObjectID and resourceObjectID in XrefTable:
                             resBuffer = readObject(resourceObjectID)     #PDF.read(4096)
+
+                #Images processing
+                XObjectPattern = rb"/XObject<<\s*/([^ ]+)\s+(\d+\s+\d+\s+R)"
+                XObject = re.search(XObjectPattern, resBuffer)
+                XObjectName = XObject.group(1)
+                XObjectAddress = int(XObject.group(2).split()[0])
+                XObjectOffset = XrefTable[XObjectAddress]
+
+                imageDict = imageDictFinder(XObjectOffset)
+
+                #with open("Outputs/image.jpg", "wb") as img:
+                #    img.write(imageDict["imageBytes"])
 
                 fontscMap = fontDictFinder(resBuffer) #This maps each font F1 F2 F5 etc to a dict with each value(but in hexadecimal). but I will do that at the end of the code.
                 
@@ -700,4 +736,4 @@ def PDFToWord(PDFPath):
     doc.save(outputPath)
     print("done")
 
-PDFToWord("Inputs/file-example_PDF_500_kB.pdf")
+PDFToWord("Inputs/emaar1.pdf")
