@@ -4,7 +4,8 @@ from io import BytesIO
 
 
 
-pdf3 = "Inputs\\emaar.pdf"
+# pdf3 = "Inputs\\emaar.pdf"
+pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
 
 with open(pdf3, "rb") as file:
     PDF_Data_RB = file.read()
@@ -15,28 +16,34 @@ PDF_Data = PDF_Data_RB.decode('latin1')
 trailerFindString = r"/\s*Root\s+(\d+)\s+(\d+)\s+R"
 Catalog = re.search(trailerFindString, PDF_Data, flags=re.IGNORECASE)
 CatalogID = (Catalog.group(1))
+print(CatalogID)
 
 #finds the Catalog object and from it extracts the parent ID 
 ParentRefOffset = (re.search(fr"{CatalogID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
 ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
 ParentObj = re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)
 ParentID = (ParentObj.group(1))
+print(ParentID)
 
 # searches up the parent id and finds the parent object
 MainParentOffset = (re.search(fr"{ParentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
-MainParentEnd = (re.search("]", PDF_Data[MainParentOffset:], flags=re.IGNORECASE)).end() + MainParentOffset
+MainParentEnd = (re.search("endobj", PDF_Data[MainParentOffset:], flags=re.IGNORECASE)).end() + MainParentOffset
 ParentBody = PDF_Data[MainParentOffset:MainParentEnd]
 
+# print(Pare)
 #  searches for the kids in the parent obj and appends in the list
-KidsFindString = r"\s*(\d+)\s*0\s*R"
-Kids = re.finditer(KidsFindString, ParentBody, flags=re.IGNORECASE)
+KidsFindString = r"\b(\d+)\s*0\s*R"
+KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
+KidEnd = (re.search("]", ParentBody[KidStart:], flags=re.IGNORECASE)).end() + KidStart
+
+Kids = re.finditer(KidsFindString, ParentBody[KidStart:KidEnd], flags=re.IGNORECASE)
 Kids_List = []
 for kid in Kids:
     Kids_List.append(int(kid.group(1)))
 
 # finds the total number of pages
-PageCountString = r"\s*/\s*Count\s*(\d+)"
-PageCount = (re.search(PageCountString, ParentBody, flags=re.IGNORECASE)).group(1)
+PageCountString = r"/\s*Count\s*(\d+)"
+PageCount = (re.search(PageCountString, PDF_Data[MainParentOffset:], flags=re.IGNORECASE)).group(1)
 
 # if the extracted kids donot match with the count, then if means PDF has subParents, so then it goes to each subparent and and extracts its kids
 if PageCount != len(Kids_List): 
@@ -54,6 +61,7 @@ if PageCount != len(Kids_List):
 
     # replaces the subParents with the new pages list
     Kids_List = KidPages
+print(Kids_List)
 
 #extracting content from each page
 
@@ -68,6 +76,8 @@ def Reference_Find(KidObject, RefType):
 
     Ref_List = []
     ObjBody = (KidObject['Body'])
+    print(KidObject['ObjectID'])
+    print(ObjBody)
 
     Start = (re.search(ContentStartStr, ObjBody, flags=re.IGNORECASE)).end()
     End = (re.search(r"/", ObjBody[Start:], flags=re.IGNORECASE)).start() + Start
@@ -138,7 +148,6 @@ for ContentObj in PDF_Pages_List:
                 decompressedStreams = zlib.decompress(StreamSelect)
                 # converts it into string
                 StringStream = decompressedStreams.decode('latin1')
-                # print(StringStream)
                 # Seperates each line into a list
 
                 '''
@@ -164,17 +173,23 @@ for ContentObj in PDF_Pages_List:
                 '''
 
                 svg_elements = []
+                # list of elements of the new svg
+
+                #makes the svg header using the width and height
                 svg_elements.append(f'<svg width="{MediaWidth}" height="{MediaHeight}" xmlns="http://www.w3.org/2000/svg">')
 
+                # sets default fill to black
                 current_fill = "#000000"
+                # removes the whitespaces at end and breaks the stream into lines
                 StreamLines = ((StringStream.strip()).split("\n"))
+
+                # goes through each line and strips whitespaces
                 for line in StreamLines:
                     line = line.strip()
 
                 i = 0
                 while i < len(StreamLines):
                     line = StreamLines[i]
-                    # print(i)
                     #finds the colours
                     if "scn" in line or "rg" in line:
                         parts = line.split()
@@ -193,13 +208,15 @@ for ContentObj in PDF_Pages_List:
 
 
                     if line.startswith('q'):
+                        #start of a new group of instructions
                         block_lines = []
                         i += 1
-                        while i < len(StreamLines) and StreamLines[i] != "Q":
+                        while i < len(StreamLines) and StreamLines[i] != "Q": #ensures not end of file and not end of group
+                            # appends the lines of that group
                             block_lines.append(StreamLines[i])
                             i += 1
 
-                        translateX, translateY = 0.0, 0.0
+                        translateX, translateY = 0.0, 0.0 #default x and y
                         path_cmd = []
                         mapping_commands = [(' m', ' M'), (' l', ' L'), (' c', ' C'), (' v', ' V'), (' y', ' Y'), (' h', ' Z'), (' f', '')]
                         path_Commands = ['m', 'l', 'c', 'v', 'y', 'h','f']
