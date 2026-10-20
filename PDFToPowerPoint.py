@@ -110,13 +110,18 @@ for KidObj in PDF_Pages_List:
 
 for ContentObj in PDF_Pages_List:
     ContentList = ContentObj['Content']
+    print(ContentObj["ObjectID"])
+    MediaBox = re.search(r"\s*/\s*MediaBox\W(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\W", ContentObj["Body"], flags=re.IGNORECASE)
+    # print(MediaBox)
+    MediaHeight = float(MediaBox.group(4)) - float(MediaBox.group(2))
+    MediaWidth = float(MediaBox.group(3)) - float(MediaBox.group(1))
+
+    print(MediaHeight, MediaWidth)
     for ContentID in ContentList:
         ContentStart = (re.search(fr"\b{ContentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
         ContentEnd = (re.search(objectEndString, PDF_Data[ContentStart:], flags=re.IGNORECASE)).end() + ContentStart
         ContentBody = PDF_Data[ContentStart:ContentEnd]
         FilterFind = re.search(r"\s*/\s*Filter\s*", ContentBody, flags=re.IGNORECASE)
-
-        # /Filter/FlateDecode
         #checks if there is a filter or not
         if FilterFind:
             FlateDecodeFilter = re.search(r"\s*/\s*FlateDecode\s*", ContentBody, flags=re.IGNORECASE)
@@ -133,21 +138,112 @@ for ContentObj in PDF_Pages_List:
                 decompressedStreams = zlib.decompress(StreamSelect)
                 # converts it into string
                 StringStream = decompressedStreams.decode('latin1')
+                # print(StringStream)
                 # Seperates each line into a list
-                StreamLines = StringStream.split("\n")
+
+                '''
+                Need a transition logic
+                
+                - COnverting PostScript Vector into SVG
+
+                CHANGES:
+                m to M (moveto)
+                l to L (lineto)
+                c to C (curveto)
+                h to Z (closepath)
+                f to <path> (fill)
+
+                TRACK GRAPHIC STATE WRAPPER
+                - Stream starts with g and ends with Q blocks
+                - these are opening and closing brackets
+                - these need to be replaced with <g>
+                
+                ASEMBLE SVG XML
+                - get width and height from mediabox
+                - close SVG root tag
+                '''
+
+                svg_elements = []
+                svg_elements.append(f'<svg width="{MediaWidth}" height="{MediaHeight}" xmlns="http://www.w3.org/2000/svg">')
+
+                current_fill = "#000000"
+                StreamLines = ((StringStream.strip()).split("\n"))
+                for line in StreamLines:
+                    line = line.strip()
+
+                i = 0
+                while i < len(StreamLines):
+                    line = StreamLines[i]
+                    # print(i)
+                    #finds the colours
+                    if "scn" in line or "rg" in line:
+                        parts = line.split()
+                        # breaks on spaces, if colour system scn then converts nto rgb
+                        # pdfs use normalized floats while svg uses 8 bit rgb or hex
+
+                        if len(parts) >= 4 and parts[-1] == "scn":
+                            r = int(float(parts[-4]) * 255)
+                            g = int(float(parts[-3]) * 255)
+                            b = int(float(parts[-2]) * 255)
+                            current_fill = f"#{r:02x}{g:02x}{b:02x}"
+                            #make the current fill like #000000
+                            #: seperates text from formatting
+                            #02 sets the minimum lenght to 2
+                            #x converts into hexadecimal
+
+
+                    if line.startswith('q'):
+                        block_lines = []
+                        i += 1
+                        while i < len(StreamLines) and StreamLines[i] != "Q":
+                            block_lines.append(StreamLines[i])
+                            i += 1
+
+                        translateX, translateY = 0.0, 0.0
+                        path_cmd = []
+                        mapping_commands = [(' m', ' M'), (' l', ' L'), (' c', ' C'), (' v', ' V'), (' y', ' Y'), (' h', ' Z'), (' f', '')]
+                        path_Commands = ['m', 'l', 'c', 'v', 'y', 'h','f']
+                        
+                        for b_line in block_lines:
+                            if b_line.endswith('cm'):
+                                parts = b_line.strip()
+                                if len(parts) >= 6:
+                                    translateX = float(parts[4])
+                                    translateY = float(parts[5])
+                            
+                            elif any(b_line.endswith(op) for op in path_Commands):
+                                mapped_line = b_line
+                                for op, svg_op in mapping_commands:
+                                    mapped_line = mapped_line.replace(op, svg_op)
+                                path_cmd.append(mapped_line)
+                        if path_cmd:
+                            d_string = " ".join(path_cmd)
+                            #cleanup multiple spaces
+                            d_string = re.sub(r"\s+", " ", d_string).strip()
+
+                            svg_elements.append((f'  <g transform="translate({translateX}, {translateY})">'))
+                            svg_elements.append(f'    <path d="{d_string}" fill="{current_fill}" />')
+                            svg_elements.append(f'  </g>')
+                    i += 1
+
+                svg_elements.append("</svg>")
+                svg_output =  "\n".join(svg_elements)
 
 
 
-                # for line in StreamLines:
-
-                ''''''
 
 
+                # print(StreamLines)
+                
+                with open("Outputs\\test.svg" , "w") as file:
+                    file.write(svg_output)
+                
 
-                break
 
-            break
-        break
+                
+
+            
+    
     break
 
 
