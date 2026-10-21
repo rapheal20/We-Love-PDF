@@ -20,7 +20,7 @@ Objects_List = [
 
 # pdf3 = "Inputs\\emaar.pdf"
 # pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
-pdf3 = "Inputs\\TranslatorsNew.pdf"
+pdf3 = "Inputs\\emaar1.pdf"
 
 def PDF_Compress(pdf_file):   
     try:

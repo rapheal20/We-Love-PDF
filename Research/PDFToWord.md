@@ -52,3 +52,14 @@ b'13 0 obj\n<</Type/XObject/Subtype/Image/Width 2160 /Height 1441 /BitsPerCompon
     - \w: matches any character (letter, numbers, underscore)
     - \s: matches any whitescape (spaces, tabs, newlines) 
 
+# Imp thing. 
+In modern pdfs (1.5+): cross reference streams are used instead of ACII xref tables so that compression is better. THis means i need to check the version and find xref accordingly. 
+
+The cross reference stream has /Type /XRef. 
+then /Size 233. 
+Then /W [1 4 1]: this specifies the width in bytes of the fields in each record. in this case, every entry is 6 bytes long. 
+field 1: 0 = free, 1 = in use, 2 = compressed 
+field 2: byte offset or object number 
+field 3: generation uumber 
+
+So I remake the func with both cases
