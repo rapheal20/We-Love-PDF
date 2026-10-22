@@ -4,7 +4,7 @@ from io import BytesIO
 
 
 
-pdf3 = "Inputs\\emaar.pdf"
+pdf3 = "Inputs\\emaar1.pdf"
 # pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
 
 with open(pdf3, "rb") as file:
@@ -117,19 +117,76 @@ for KidObj in PDF_Pages_List:
 
     ResFindStr = r"/\s*Resources\s*"
     ObjBody = KidObj["Body"]
-    ResStart = (re.search(ResFindStr, ObjBody, flags=re.IGNORECASE)).end()
-    ResEnd = (re.search(r">>>>", ObjBody[ResStart:], flags=re.IGNORECASE)).start() + ResStart
+    ResStart = (re.search(ResFindStr, ObjBody, flags=re.IGNORECASE)).end() #finds the starting offset of Resources
+    ResEnd = (re.search(r">>>>", ObjBody[ResStart:], flags=re.IGNORECASE)).start() + ResStart #finds the ending offset of Resources
     ResSelected = ObjBody[ResStart:ResEnd]
     ResSelectedList = ResSelected.split("/")
     # print(ResSelectedList)
-    Resources = []
-    for eachPart in ResSelectedList:
-        item = re.search(r"(\w+)\s*(\d+)\s*0\s*R", eachPart, flags=re.IGNORECASE)
-        if item:
-            # print(item.group(0))
-            Resources.append({item.group(1):item.group(2)})
 
-    print(Resources)
+    '''
+    Resources = {
+        "CS0" : {
+            "ObjectID" : 216,
+            "Body" : ...,
+            "Type" : Colourspace
+        }
+    }
+    '''
+
+
+    Resources = {}
+    for i in range(len(ResSelectedList)):
+        item = re.search(r"(\w+)\s*(\d+)\s*0\s*R", ResSelectedList[i], flags=re.IGNORECASE)
+        if item:
+            # item = re.search(r"(\w+)\s*(\d+)\s*0\s*R", ResSelectedList[i-1], flags=re.IGNORECASE)
+            itemL = str(item.group(1)).lower()
+            # print(itemL)
+            if itemL.startswith("cs"):
+                
+                ResStartOffset = (re.search(fr"\b{int(item.group(2))}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+                ResEndOffset = (re.search(objectEndString, PDF_Data[ResStartOffset:], flags=re.IGNORECASE)).end() + ResStartOffset
+                # Resources[item.group(1)] = {"ObjectID" : item.group(2), }
+                # Resources[]["Body"] = PDF_Data[ResStartOffset: ResEndOffset]
+                ResBody = PDF_Data[ResStartOffset: ResEndOffset]
+                # print(ResBody)
+
+                ICCBased = re.search(r"/\s*ICCBased", ResBody, flags=re.IGNORECASE)
+                if ICCBased:
+                    print("ICC")
+                    ICCDefID = re.search(r"\s*(\d+)\s*0\s*R", ResBody, flags=re.IGNORECASE)
+                    ICCID = int(ICCDefID.group(1))
+                    ICCDefOffset = (re.search(fr"\b{ICCID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+                    ICCDefEnd = ((re.search(objectEndString, PDF_Data[ICCDefOffset:], flags=re.IGNORECASE)).end()) + ICCDefOffset
+                    ICCObj = PDF_Data[ICCDefOffset:ICCDefEnd]
+
+                    # finds the start of stream
+                    StreamStart = (re.search(r"\s*stream\s*", ICCObj, flags=re.IGNORECASE)).end()
+                    #find the end of stream
+                    StreamEnd = (re.search(r"\s*endstream\s*", ICCObj, flags=re.IGNORECASE)).start()
+                    ICCStream = ICCObj[StreamStart:StreamEnd]
+
+
+                    FlateDecodeFilter = re.search(r"\s*/\s*FlateDecode\s*", ICCObj, flags=re.IGNORECASE)
+                    if FlateDecodeFilter:
+                        StreamSelect = ICCStream.encode('latin1')
+                    try:
+                        decompressedStreams = zlib.decompress(StreamSelect)
+                    except:
+                        # most pdfs have metadata in their header, this allows zlib to parse anyway
+                        decompressedStreams = zlib.decompress(StreamSelect, wbits=-zlib.MAX_WBITS)
+
+                    print(decompressedStreams)
+                
+
+    
+
+
+    # for ResourceID in (Resources.keys()):
+    #     ObjID = Resources[ResourceID]["ObjectID"]
+        
+        
+
+    # print(Resources)
     # ResRefs = re.finditer(KidsFindString, Selected, flags=re.IGNORECASE)
     # for Ref in ContentRefs:
     #     Ref_List.append(int(Ref.group(1)))

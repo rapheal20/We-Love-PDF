@@ -2,8 +2,6 @@ import os
 import re
 import zlib
 
-delimiterList = [" ", "\n", "\r", ">", "/"]
-
 #Returns PDF version
 def PDFVersionFunc(PDFPath):
     PDF = open(PDFPath, "rb")

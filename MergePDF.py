@@ -22,13 +22,13 @@ import re
 from helperfunctions import Make_Header, Make_Xref, PDF_ID_Remap
 
 
-pdf2 = "Inputs\\file-example_PDF_1MB.pdf"
-pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
-pdf3 = "Inputs\\emaar.pdf"
-
+# pdf2 = "Inputs\\file-example_PDF_1MB.pdf"
+# pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
+pdf3 = "Inputs\\emaar1.pdf"
+pdf4 = "Inputs\\emaar1.pdf"
 
 def Merge_PDF(pdf1, pdf2):
-    try:
+    # try:
         #rb mode is for read only in binary mode
         #opening file 1
         with open(pdf1, "rb") as file:
@@ -117,8 +117,8 @@ def Merge_PDF(pdf1, pdf2):
         encodedPDF = CombinePDFStr.encode("latin1")
         with open("Outputs\\WeLovePDF_Merged.pdf" , "wb") as file:
             file.write(encodedPDF)
-    except:
-        print("Error")
+    # except:
+    #     print("Error")
 
 #the following function removes the /Parent and /Catalog from a PDF file
 def PDF_Clean(pdfData, pdfOffsetList):
@@ -221,5 +221,5 @@ def Make_Parent(PDF1_Extract_Clean, PDF2_Extract_Clean, PDF2_Data, IncrementID):
 
 # pdf3 = "Inputs\\DataRepresentation2k26.pdf"
 # pdf4 = "Inputs\\TranslatorsNew.pdf"
-Merge_PDF(pdf1, pdf3)
+Merge_PDF(pdf4, pdf3)
 
