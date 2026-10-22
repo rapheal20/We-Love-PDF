@@ -11,7 +11,16 @@ def SplitPDF(PDFPath, splitPage):
 
     PDFVersion = PDFVersionFunc(PDFPath)
 
-    XrefTable, XrefTableAddress = XrefTableFunc(PDFPath)
+    xrefResult = XrefTableFunc(PDFPath)
+
+    if isinstance(xrefResult, tuple):
+        XrefTable, XrefTableAddress = xrefResult
+    else:
+        XrefTable = xrefResult
+        XrefTableAddress = [list(XrefTable.values())[0]['offset']] if XrefTable else [0]
+
+    if isinstance(XrefTableAddress, list) and XrefTableAddress:
+        XrefTableAddress = XrefTableAddress[-1]
 
     RootObjectID = RootObjectIDFunc(PDFPath)
 
@@ -363,4 +372,4 @@ def SplitPDF(PDFPath, splitPage):
 
     PDF.close()  
 
-#SplitPDF("Inputs/9709_w24_qp_11.pdf", 11)
+SplitPDF("Inputs/9709_w24_qp_11.pdf", 11)

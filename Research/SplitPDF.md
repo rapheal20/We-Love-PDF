@@ -14,3 +14,5 @@ The working of the SplitPDF is:
 8. Everything in 6 and 7 is then written to the new export file
 
 Coded by Anael
+
+I just found out that there are actually two types of pdf. Due to this a lot of the code would have to be rewritten to accomodate the second type. 
