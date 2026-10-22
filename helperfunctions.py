@@ -37,11 +37,12 @@ def parseASCIIXref(PDFcontent: bytes, offset: int, xrefTable: dict):
 
                 if len(entry) >= 3:
                     objectID = startID + i
-                    xrefTable[objectID] = {
+                    xrefTable[objectID] = int(entry[0])
+                    '''xrefTable[objectID] = {
                         "offset": int(entry[0]),
                         "generation": int(entry[1]),
                         "type": entry[2].decode('latin1')
-                    }
+                    }'''
 
                 index += 1
             continue
@@ -88,11 +89,11 @@ def parseXrefStream(PDFcontent: bytes, offset: int, xrefTable: dict):
     objectData = PDFcontent[offset:offset + 5000]
 
     #the xref properties
-    sizeM = re.search(b"\/Size\s+(\d+)", objectData)
-    wM = re.search(b"\/W\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s*\]", objectData)
-    predM = re.search(b"\/Predictor\s+(\d+)", objectData)
-    colsM = re.search(b"\/Columns\s+(\d+)", objectData)
-    indexM = re.search(b"\/Index\s*\[\s*([0-9\s]+)\s*\]", objectData)
+    sizeM = re.search(rb"\/Size\s+(\d+)", objectData)
+    wM = re.search(rb"\/W\s*\[\s*(\d+)\s+(\d+)\s+(\d+)\s*\]", objectData)
+    predM = re.search(rb"\/Predictor\s+(\d+)", objectData)
+    colsM = re.search(rb"\/Columns\s+(\d+)", objectData)
+    indexM = re.search(rb"\/Index\s*\[\s*([0-9\s]+)\s*\]", objectData)
 
     if not sizeM or not wM:
         return 
@@ -157,36 +158,43 @@ def parseXrefStream(PDFcontent: bytes, offset: int, xrefTable: dict):
             elif f1 == 2:
                 typeStr = "compressedInsideStream"
 
-            xrefTable[objectID] = {
+            xrefTable[objectID] = f2
+
+            '''xrefTable[objectID] = {
                 "offset": f2,
                 "generation": f3,
                 "type": typeStr
-            }
+            }'''
+
+                 
 
 #Returns XrefTable of the PDF
 def XrefTableFunc(PDFPath):
     xrefTable = {}
+    xrefAddresses = []
 
     PDF = open(PDFPath, "rb")
     PDFcontent = PDF.read()
 
-    startXrefMatches = list(re.finditer(b"startxref\s+(\d+)", PDFcontent))
+    startXrefMatches = list(re.finditer(rb"startxref\s+(\d+)", PDFcontent))
 
-    xrefStreamMatches = list(re.finditer(b"(\d+)\s+(\d+)\s+obj\s*<<[^>]*\/Type\s*\/XRef", PDFcontent))
+    xrefStreamMatches = list(re.finditer(rb"(\d+)\s+(\d+)\s+obj\s*<<[^>]*\/Type\s*\/XRef", PDFcontent)) 
 
     #First method: Processing using the startxref pointers
     if startXrefMatches:
         for match in startXrefMatches:
             offset = int(match.group(1))
-            if offset >= len(PDFcontent):
+            if offset == 0 or offset >= len(PDFcontent): #0 means the header so skip it 
                 continue
+
+            xrefAddresses.append(offset)
 
             peek = PDFcontent[offset: offset + 20].strip() #checking the offset location to find format
 
             if peek.startswith(b"xref"): #Older version
                 parseASCIIXref(PDFcontent, offset, xrefTable)
             else: 
-                objectMatch = re.search(b"(\d+)\s+(\d+)\s+obj", PDFcontent[max(0, offset-100):offset+50])
+                objectMatch = re.search(rb"(\d+)\s+(\d+)\s+obj", PDFcontent[max(0, offset-100):offset+50])
                 if objectMatch:
                     objectID = int(objectMatch.group(1))
                     parseXrefStream(PDFcontent, PDFcontent.find(f"{objectID} ".encode() + b"0 obj", max(0, offset-200)), xrefTable)
@@ -195,11 +203,22 @@ def XrefTableFunc(PDFPath):
     if xrefStreamMatches:
         for match in xrefStreamMatches:
             streamOffset = match.start()
+            xrefAddresses.append(streamOffset)
             parseXrefStream(PDFcontent, streamOffset, xrefTable)
 
-    return xrefTable
+    #this is another backup where if the xref table offset is wrong so I will find the xref table directly as work
+    if not xrefTable:
+        for backupOffset in re.finditer(rb"\bxref\b", PDFcontent):
+            xrefAddresses.append(backupOffset.start())
+            parseASCIIXref(PDFcontent, backupOffset.start(), xrefTable)
+            if xrefTable:
+                break
 
-    PDF.close()      
+    return xrefTable, xrefAddresses
+
+    PDF.close()
+
+#print(XrefTableFunc("Inputs/emaar1.pdf"))
 
 #Returns the RootObjectID of the PDF
 def RootObjectIDFunc(PDFPath):
