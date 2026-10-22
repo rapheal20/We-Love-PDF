@@ -50,3 +50,23 @@
     - For linking the Image to the slide:
     - we create a relationship file for slide1.xml
     
+
+Need a transition logic
+
+- COnverting PostScript Vector into SVG
+
+CHANGES:
+m to M (moveto)
+l to L (lineto)
+c to C (curveto)
+h to Z (closepath)
+f to <path> (fill)
+
+TRACK GRAPHIC STATE WRAPPER
+- Stream starts with g and ends with Q blocks
+- these are opening and closing brackets
+- these need to be replaced with <g>
+
+ASEMBLE SVG XML
+- get width and height from mediabox
+- close SVG root tag

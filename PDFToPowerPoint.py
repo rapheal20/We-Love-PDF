@@ -4,8 +4,8 @@ from io import BytesIO
 
 
 
-# pdf3 = "Inputs\\emaar.pdf"
-pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
+pdf3 = "Inputs\\emaar.pdf"
+# pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
 
 with open(pdf3, "rb") as file:
     PDF_Data_RB = file.read()
@@ -16,23 +16,24 @@ PDF_Data = PDF_Data_RB.decode('latin1')
 trailerFindString = r"/\s*Root\s+(\d+)\s+(\d+)\s+R"
 Catalog = re.search(trailerFindString, PDF_Data, flags=re.IGNORECASE)
 CatalogID = (Catalog.group(1))
-print(CatalogID)
+# print(CatalogID)
 
 #finds the Catalog object and from it extracts the parent ID 
 ParentRefOffset = (re.search(fr"{CatalogID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
 ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
 ParentObj = re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)
 ParentID = (ParentObj.group(1))
-print(ParentID)
+# print(ParentID)
 
 # searches up the parent id and finds the parent object
 MainParentOffset = (re.search(fr"{ParentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
 MainParentEnd = (re.search("endobj", PDF_Data[MainParentOffset:], flags=re.IGNORECASE)).end() + MainParentOffset
 ParentBody = PDF_Data[MainParentOffset:MainParentEnd]
+# print(ParentBody)
 
 # print(Pare)
 #  searches for the kids in the parent obj and appends in the list
-KidsFindString = r"\b(\d+)\s*0\s*R"
+KidsFindString = r"(\d+)\s*0\s*R"
 KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
 KidEnd = (re.search("]", ParentBody[KidStart:], flags=re.IGNORECASE)).end() + KidStart
 
@@ -40,13 +41,15 @@ Kids = re.finditer(KidsFindString, ParentBody[KidStart:KidEnd], flags=re.IGNOREC
 Kids_List = []
 for kid in Kids:
     Kids_List.append(int(kid.group(1)))
+# print(len(Kids_List))
 
 # finds the total number of pages
 PageCountString = r"/\s*Count\s*(\d+)"
 PageCount = (re.search(PageCountString, PDF_Data[MainParentOffset:], flags=re.IGNORECASE)).group(1)
-
+# print(PageCount)
 # if the extracted kids donot match with the count, then if means PDF has subParents, so then it goes to each subparent and and extracts its kids
-if PageCount != len(Kids_List): 
+if int(PageCount) != (len(Kids_List)): 
+    # print("IN")
     KidPages = []
     for kidID in Kids_List:
         SubParents = re.finditer(fr"\b{kidID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)   
@@ -61,27 +64,20 @@ if PageCount != len(Kids_List):
 
     # replaces the subParents with the new pages list
     Kids_List = KidPages
-print(Kids_List)
+# print(Kids_List)
 
 #extracting content from each page
 
-def Reference_Find(KidObject, RefType):
-    #RefType 1 for /Contents
-    #RefType 2 for /Resources
-
-    if RefType == 1:
-        ContentStartStr = r"\s*/\s*Contents\s*"
-    elif RefType == 0:
-        ContentStartStr = r"\s*/\s*Resources\s*"
-
+def Content_Find(KidObject):
+    ContentStartStr = r"/\s*Contents\s*"
     Ref_List = []
     ObjBody = (KidObject['Body'])
-    print(KidObject['ObjectID'])
-    print(ObjBody)
+
 
     Start = (re.search(ContentStartStr, ObjBody, flags=re.IGNORECASE)).end()
-    End = (re.search(r"/", ObjBody[Start:], flags=re.IGNORECASE)).start() + Start
-    Selected = KidObject['Body'][Start:End]
+    End = (re.search(r"]|>|/", ObjBody[Start:], flags=re.IGNORECASE)).start() + Start
+    Selected = ObjBody[Start:End]
+    # print(Selected)
     ContentRefs = re.finditer(KidsFindString, Selected, flags=re.IGNORECASE)
     for Ref in ContentRefs:
         Ref_List.append(int(Ref.group(1)))
@@ -115,162 +111,207 @@ PDF_Pages_List = list(PDF_Pages.values())
 for KidObj in PDF_Pages_List:
     
     # Content Ref
-    Content_Ref_List = Reference_Find(KidObj, 1)
+    Content_Ref_List = Content_Find(KidObj)
     PDF_Pages[KidObj['ObjectID']]["Content"] = Content_Ref_List
 
-for ContentObj in PDF_Pages_List:
-    ContentList = ContentObj['Content']
-    print(ContentObj["ObjectID"])
-    MediaBox = re.search(r"\s*/\s*MediaBox\W(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\W", ContentObj["Body"], flags=re.IGNORECASE)
-    # print(MediaBox)
-    MediaHeight = float(MediaBox.group(4)) - float(MediaBox.group(2))
-    MediaWidth = float(MediaBox.group(3)) - float(MediaBox.group(1))
 
-    print(MediaHeight, MediaWidth)
-    for ContentID in ContentList:
-        ContentStart = (re.search(fr"\b{ContentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
-        ContentEnd = (re.search(objectEndString, PDF_Data[ContentStart:], flags=re.IGNORECASE)).end() + ContentStart
-        ContentBody = PDF_Data[ContentStart:ContentEnd]
-        FilterFind = re.search(r"\s*/\s*Filter\s*", ContentBody, flags=re.IGNORECASE)
-        #checks if there is a filter or not
-        if FilterFind:
-            FlateDecodeFilter = re.search(r"\s*/\s*FlateDecode\s*", ContentBody, flags=re.IGNORECASE)
-            if FlateDecodeFilter:
-                # finds the start of stream
-                StreamStart = (re.search(r"\s*stream\s*", ContentBody, flags=re.IGNORECASE)).end()
-                #find the end of stream
-                StreamEnd = (re.search(r"\s*endstream\s*", ContentBody, flags=re.IGNORECASE)).start()
-                # Slices and selects just the stream
-                StreamSelect = ContentBody[StreamStart:StreamEnd]
-                # encodes the stream from string to latin1
-                StreamSelect = StreamSelect.encode('latin1')
-                # decompresses the stream
-                decompressedStreams = zlib.decompress(StreamSelect)
-                # converts it into string
-                StringStream = decompressedStreams.decode('latin1')
-                # Seperates each line into a list
+    ResFindStr = r"/\s*Resources\s*"
+    ObjBody = KidObj["Body"]
+    ResStart = (re.search(ResFindStr, ObjBody, flags=re.IGNORECASE)).end()
+    ResEnd = (re.search(r">>>>", ObjBody[ResStart:], flags=re.IGNORECASE)).start() + ResStart
+    ResSelected = ObjBody[ResStart:ResEnd]
+    ResSelectedList = ResSelected.split("/")
+    # print(ResSelectedList)
+    Resources = []
+    for eachPart in ResSelectedList:
+        item = re.search(r"(\w+)\s*(\d+)\s*0\s*R", eachPart, flags=re.IGNORECASE)
+        if item:
+            # print(item.group(0))
+            Resources.append({item.group(1):item.group(2)})
 
-                '''
-                Need a transition logic
+    print(Resources)
+    # ResRefs = re.finditer(KidsFindString, Selected, flags=re.IGNORECASE)
+    # for Ref in ContentRefs:
+    #     Ref_List.append(int(Ref.group(1)))
+    # return Ref_List
+    break
+# /Resources<<
+# /ColorSpace<</CS0 216 0 R>>
+# /ExtGState<</GS0 218 0 R/GS1 217 0 R>>
+# /XObject<</Fm0 226 0 R>>
+# >>
+
+
+
+# for ContentObj in PDF_Pages_List:
+#     ContentList = ContentObj['Content']
+#     print(ContentObj["ObjectID"])
+#     # print(ContentObj["Body"])
+#     MediaBox = re.search(r"/\s*MediaBox\W(\d+\.\d+|\d+)\s+(\d+\.\d+|\d+)\s+(\d+\.\d+|\d+)\s+(\d+\.\d+|\d+)\W", ContentObj["Body"], flags=re.IGNORECASE)
+#     # print(MediaBox)
+#     MediaHeight = float(MediaBox.group(4)) - float(MediaBox.group(2))
+#     MediaWidth = float(MediaBox.group(3)) - float(MediaBox.group(1))
+
+#     print(MediaHeight, MediaWidth)
+#     for ContentID in ContentList:
+#         print(ContentID)
+#         ContentStart = (re.search(fr"\b{ContentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+#         ContentEnd = (re.search(objectEndString, PDF_Data[ContentStart:], flags=re.IGNORECASE)).end() + ContentStart
+#         ContentBody = PDF_Data[ContentStart:ContentEnd]
+#         # print(ContentBody)
+#         FilterFind = re.search(r"\s*/\s*Filter\s*", ContentBody, flags=re.IGNORECASE)
+#         #checks if there is a filter or not
+#         if FilterFind:
+#             FlateDecodeFilter = re.search(r"\s*/\s*FlateDecode\s*", ContentBody, flags=re.IGNORECASE)
+#             if FlateDecodeFilter:
+#                 # rb_Content = PDF_Data_RB[ContentStart:ContentEnd]
+
+#                 # finds the start of stream
+#                 StreamStart = (re.search(r"\s*stream\s*", ContentBody, flags=re.IGNORECASE)).end()
+#                 #find the end of stream
+#                 StreamEnd = (re.search(r"\s*endstream\s*", ContentBody, flags=re.IGNORECASE)).start()
+#                 # Slices and selects just the stream
+#                 StreamSelect = ContentBody[StreamStart:StreamStart+2716]
+#                 # print((StreamSelect))
+#                 # StreamSelect = StreamSelect.strip()
+#                 # encodes the stream from string to latin1
+#                 StreamSelect = StreamSelect.encode('latin1')
                 
-                - COnverting PostScript Vector into SVG
-
-                CHANGES:
-                m to M (moveto)
-                l to L (lineto)
-                c to C (curveto)
-                h to Z (closepath)
-                f to <path> (fill)
-
-                TRACK GRAPHIC STATE WRAPPER
-                - Stream starts with g and ends with Q blocks
-                - these are opening and closing brackets
-                - these need to be replaced with <g>
+#                 # print(StreamSelect[:500])
+#                 # decompresses the stream
+#                 # break
+#                 try:
+#                     decompressedStreams = zlib.decompress(StreamSelect)
+#                 except:
+#                     # most pdfs have metadata in their header, this allows zlib to parse anyway
+#                     decompressedStreams = zlib.decompress(StreamSelect, wbits=-zlib.MAX_WBITS)
                 
-                ASEMBLE SVG XML
-                - get width and height from mediabox
-                - close SVG root tag
-                '''
+#                 # converts it into string
+#                 StringStream = decompressedStreams.decode('latin1')
+#                 # print(StringStream)
 
-                svg_elements = []
-                # list of elements of the new svg
+#                 svg_elements = []
+#                 svg_elements.append(f'<svg width="{MediaWidth}" height="{MediaHeight}" xmlns="http://www.w3.org/2000/svg">')
+#                 current_fill = "#000000"
+#                 StreamTokens = StringStream.split()
+#                 # print(StreamTokens)
 
-                #makes the svg header using the width and height
-                svg_elements.append(f'<svg width="{MediaWidth}" height="{MediaHeight}" xmlns="http://www.w3.org/2000/svg">')
+#                 # goes through each line and strips whitespaces
+#                 # for line in StreamLines:
+#                 #     line = line.strip()
 
-                # sets default fill to black
-                current_fill = "#000000"
-                # removes the whitespaces at end and breaks the stream into lines
-                StreamLines = ((StringStream.strip()).split("\n"))
+#                 i = 0
+#                 while i < len(StreamTokens):
+#                     token = StreamTokens[i]
+#                     #finds the colours
+#                     if token == "scn" or token == "rg":
+#                         # parts = line.split()
+#                         # breaks on spaces, if colour system scn then converts nto rgb
+#                         # pdfs use normalized floats while svg uses 8 bit rgb or hex
 
-                # goes through each line and strips whitespaces
-                for line in StreamLines:
-                    line = line.strip()
-
-                i = 0
-                while i < len(StreamLines):
-                    line = StreamLines[i]
-                    #finds the colours
-                    if "scn" in line or "rg" in line:
-                        parts = line.split()
-                        # breaks on spaces, if colour system scn then converts nto rgb
-                        # pdfs use normalized floats while svg uses 8 bit rgb or hex
-
-                        if len(parts) >= 4 and parts[-1] == "scn":
-                            r = int(float(parts[-4]) * 255)
-                            g = int(float(parts[-3]) * 255)
-                            b = int(float(parts[-2]) * 255)
-                            current_fill = f"#{r:02x}{g:02x}{b:02x}"
-                            #make the current fill like #000000
-                            #: seperates text from formatting
-                            #02 sets the minimum lenght to 2
-                            #x converts into hexadecimal
+#                         if token == "rg" and i >= 3:
+#                             r = int(float(StreamTokens[i-3]) * 255)
+#                             g = int(float(StreamTokens[i-2]) * 255)
+#                             b = int(float(StreamTokens[i-1]) * 255)
+#                             current_fill = f"#{r:02x}{g:02x}{b:02x}"
+#                             #make the current fill like #000000
+#                             #: seperates text from formatting
+#                             #02 sets the minimum lenght to 2
+#                             #x converts into hexadecimal
 
 
-                    if line.startswith('q'):
-                        #start of a new group of instructions
-                        block_lines = []
-                        i += 1
-                        while i < len(StreamLines) and StreamLines[i] != "Q": #ensures not end of file and not end of group
-                            # appends the lines of that group
-                            block_lines.append(StreamLines[i])
-                            i += 1
+#                     if token == 'q':
+#                         #start of a new group of instructions
+#                         block_tokens = []
+#                         i += 1
+#                         while i < len(StreamTokens) and StreamTokens[i] != "Q": #ensures not end of file and not end of group
+#                             # appends the lines of that group
+#                             block_tokens.append(StreamTokens[i])
+#                             i += 1
 
-                        translateX, translateY = 0.0, 0.0 #default x and y
-                        path_cmd = []
-                        mapping_commands = [(' m', ' M'), (' l', ' L'), (' c', ' C'), (' v', ' V'), (' y', ' Y'), (' h', ' Z'), (' f', '')]
-                        path_Commands = ['m', 'l', 'c', 'v', 'y', 'h','f']
-                        
-                        for b_line in block_lines:
-                            if b_line.endswith('cm'):
-                                parts = b_line.strip()
-                                if len(parts) >= 6:
-                                    translateX = float(parts[4])
-                                    translateY = float(parts[5])
-                            
-                            elif any(b_line.endswith(op) for op in path_Commands):
-                                mapped_line = b_line
-                                for op, svg_op in mapping_commands:
-                                    mapped_line = mapped_line.replace(op, svg_op)
-                                path_cmd.append(mapped_line)
-                        if path_cmd:
-                            d_string = " ".join(path_cmd)
-                            #cleanup multiple spaces
-                            d_string = re.sub(r"\s+", " ", d_string).strip()
+#                         translateX, translateY = 0.0, 0.0 #default x and y
+#                         path_data = []
+#                         stack = []
 
-                            svg_elements.append((f'  <g transform="translate({translateX}, {translateY})">'))
-                            svg_elements.append(f'    <path d="{d_string}" fill="{current_fill}" />')
-                            svg_elements.append(f'  </g>')
-                    i += 1
+#                         j = 0
+#                         while j < len(block_tokens):
+#                             t = block_tokens[j]
 
-                svg_elements.append("</svg>")
-                svg_output =  "\n".join(svg_elements)
+#                             if not t.isalpha() and t != "W" and t != 'n':
+#                                 stack.append(t)
+#                                 j += 1
+
+#                             else:
+#                                 op = t
 
 
+#                                 if t == 'cm' and len(stack) >= 6:
+#                                     translateX = float(stack[-2])
+#                                     translateY = float(stack[-1])
+#                                     stack = stack[:6]
+#                                     # j += 1
 
+#                                 elif op == 're' and len(stack) >= 4:
+#                                     rx, ry, rw, rh = stack[-4:]
+#                                     svg_elements.append(f'  <g transform="translate({translateX}, {translateY})">')
+#                                     svg_elements.append(f'    <rect x="{rx}" y="{ry}" width="{rw}" height="{rh}" fill="{current_fill}" />')
+#                                     svg_elements.append(f'  </g>')
+#                                     stack = stack[:-4]
+                                
+#                                 elif t in ['m', 'l', 'c', 'v', 'y', 'h']:
+                                    
+#                                     if op != 'h':
+#                                         svg_op = op.upper()
+#                                     else:
+#                                         svg_op = "Z"
 
+#                                     if op == 'h':
+#                                         # h takes no arguments
+#                                         path_data.append(svg_op)
+#                                     else:
+#                                         coords = " ".join(stack)
+#                                         path_data.append(f"{svg_op} {coords}")
+#                                         stack = []
 
-                # print(StreamLines)
-                
-                with open("Outputs\\test.svg" , "w") as file:
-                    file.write(svg_output)
-                
+#                                 elif op in ['f', 'F', 'S', 'B']:
+#                                     if path_data:
+#                                         d_string = " ".join(path_data)
+#                                         #cleanup multiple spaces
+#                                         d_string = re.sub(r"\s+", " ", d_string).strip()
+
+#                                         svg_elements.append((f'  <g transform="translate({translateX}, {translateY})">'))
+#                                         svg_elements.append(f'    <path d="{d_string}" fill="{current_fill}" />')
+#                                         svg_elements.append(f'  </g>')
+#                                         path_data = []
+#                                 else:
+#                                     stack = []
+
+#                                 j+=1
+                  
+#                     i += 1   
+#                 svg_elements.append("</svg>")
+#                 svg_output =  "\n".join(svg_elements)
+
+#                 with open(f"Outputs\\test{ContentID}.svg" , "w") as file:
+#                     file.write(svg_output)
+                     
 
 
                 
 
             
+#         # break
+#     break
+
+
+
+
+
+
     
-    break
-
-
-
-
-
     
-    
-    # print(ContentList)
-    # break
+#     # print(ContentList)
+#     # break
 
 
 
