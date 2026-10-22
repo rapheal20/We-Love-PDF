@@ -1,11 +1,32 @@
 import re
 import zlib
 from io import BytesIO
+from helperfunctions import XrefTableFunc
+
+
+'''
+New pdf structure has a stream instead of Xref
+there is no parent
+the object of type /ObjStm are containers
+other object have a offset to that object
+
+3 Types of object
+- n - Normal(uncompressed object)
+- f - Free or deleted slot
+- compressedInsideStream - This is hidden inside an /ObjStm
+
+
+
+'''
 
 
 
 pdf3 = "Inputs\\emaar1.pdf"
 # pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
+
+XRefTable, XrefAdd = XrefTableFunc(pdf3)
+
+print(XRefTable, XrefAdd)
 
 with open(pdf3, "rb") as file:
     PDF_Data_RB = file.read()
@@ -15,15 +36,20 @@ PDF_Data = PDF_Data_RB.decode('latin1')
 #finds the root of the PDF and extracts the ID of the Catalog
 trailerFindString = r"/\s*Root\s+(\d+)\s+(\d+)\s+R"
 Catalog = re.search(trailerFindString, PDF_Data, flags=re.IGNORECASE)
-CatalogID = (Catalog.group(1))
-# print(CatalogID)
+CatalogID = int(Catalog.group(1))
+print(CatalogID)
 
 #finds the Catalog object and from it extracts the parent ID 
-ParentRefOffset = (re.search(fr"{CatalogID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+# ParentRefOffset = (re.search(fr"{CatalogID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()
+ParentRefOffset = XRefTable[CatalogID]
 ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
 ParentObj = re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)
-ParentID = (ParentObj.group(1))
-# print(ParentID)
+ParentID = int(ParentObj.group(1))
+print(ParentID)
+
+
+
+print(XRefTable[ParentID])
 
 # searches up the parent id and finds the parent object
 MainParentOffset = (re.search(fr"{ParentID}\s*0\s*obj", PDF_Data, flags=re.IGNORECASE)).start()

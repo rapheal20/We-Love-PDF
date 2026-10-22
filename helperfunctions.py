@@ -37,12 +37,12 @@ def parseASCIIXref(PDFcontent: bytes, offset: int, xrefTable: dict):
 
                 if len(entry) >= 3:
                     objectID = startID + i
-                    xrefTable[objectID] = int(entry[0])
-                    '''xrefTable[objectID] = {
+                    # xrefTable[objectID] = int(entry[0])
+                    xrefTable[objectID] = {
                         "offset": int(entry[0]),
                         "generation": int(entry[1]),
                         "type": entry[2].decode('latin1')
-                    }'''
+                    }
 
                 index += 1
             continue
@@ -158,13 +158,13 @@ def parseXrefStream(PDFcontent: bytes, offset: int, xrefTable: dict):
             elif f1 == 2:
                 typeStr = "compressedInsideStream"
 
-            xrefTable[objectID] = f2
+            # xrefTable[objectID] = f2
 
-            '''xrefTable[objectID] = {
+            xrefTable[objectID] = {
                 "offset": f2,
                 "generation": f3,
                 "type": typeStr
-            }'''
+            }
 
                  
 
