@@ -4,6 +4,7 @@
 import os 
 import re 
 import zlib
+import base64
 from helperfunctions import *
 from docx import Document 
 from docx.shared import Pt
@@ -35,13 +36,45 @@ def PDFToWord(PDFPath):
 
     validOffsets = []
     for entry in XrefTable.values():
-        if entry.get('type') == "n": #only objects that really sit in the file
+        if entry.get('type') == "n": #objects in use
             validOffsets.append(entry['offset'])
 
     sortedOffsets = sorted(set(validOffsets))
     sortedOffsets.append(XrefTableAddress)
 
+    #encrypted PDFs have scrambled streams, so say so instead of writing a garbage document
+    PDF.seek(max(0, PDFSize - 2048))
+    encryptCheck = PDF.read()
+    if isinstance(XrefTableAddress, int):
+        PDF.seek(XrefTableAddress)
+        encryptCheck += PDF.read(2048)
+    if b"/Encrypt" in encryptCheck:
+        PDF.close()
+        raise ValueError("This PDF is encrypted, so it can't be converted")
+
     objStmCache = {} #so every object stream is only decompressed once
+
+    #Finds where one object ends (its endobj) in the bytes read so far, or None if more bytes are needed.
+    #Streams are skipped using /Length so binary data that happens to contain "endobj" can't cut the object short
+    def cutObject(data):
+        endObj = data.find(b"endobj")
+        streamStart = re.search(rb"[>\s]stream(?:\r\n|\n|\r)", data)
+        if streamStart and (endObj == -1 or streamStart.start() < endObj):
+            lengthMatch = re.search(rb"/Length\s+(\d+)(?!\d|\s+\d+\s+R)", data[:streamStart.start()])
+            if lengthMatch:
+                skip = streamStart.end() + int(lengthMatch.group(1))
+                if len(data) < skip + 12:
+                    return None
+                if data[skip:skip + 12].lstrip().startswith(b"endstream"):
+                    endStream = skip
+                else:
+                    endStream = data.find(b"endstream", streamStart.end())
+            else:
+                endStream = data.find(b"endstream", streamStart.end())
+            if endStream == -1:
+                return None
+            endObj = data.find(b"endobj", endStream)
+        return None if endObj == -1 else data[:endObj]
 
     #Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
     def GetObjectBytes(objectID):
@@ -55,15 +88,16 @@ def PDFToWord(PDFPath):
             body = ReadObjectStream(entry['offset']).get(objectID, b"")
             return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
 
-        startOffset = entry['offset']
-        try:
-            currentIndex = sortedOffsets.index(startOffset)
-            length = sortedOffsets[currentIndex + 1] - startOffset
-        except:
-            length = 2048
-
-        PDF.seek(startOffset)
-        return PDF.read(length)
+        PDF.seek(entry['offset'])
+        data = b""
+        while True:
+            more = PDF.read(65536)
+            if not more:
+                return data.split(b"endobj")[0]      #end of file: use what there is
+            data += more
+            cut = cutObject(data)
+            if cut is not None:
+                return cut
 
     #Opens one object stream and returns {objectID: bytes of that object}
     def ReadObjectStream(streamID):
@@ -72,8 +106,12 @@ def PDFToWord(PDFPath):
 
         streamObject = GetObjectBytes(streamID)
 
-        count = int(re.search(rb'/N\s+(\d+)', streamObject).group(1))     #how many objects are inside
-        first = int(re.search(rb'/First\s+(\d+)', streamObject).group(1))  #where the objects start after the id/offset list
+        countMatch = re.search(rb'/N\s+(\d+)', streamObject)         #how many objects are inside
+        firstMatch = re.search(rb'/First\s+(\d+)', streamObject)     #where the objects start after the id/offset list
+        if not countMatch or not firstMatch:
+            return {}
+        count = int(countMatch.group(1))
+        first = int(firstMatch.group(1))
 
         start = streamObject.find(b"stream") + 6
         if streamObject[start:start + 2] == b"\r\n":
@@ -81,8 +119,8 @@ def PDFToWord(PDFPath):
         elif streamObject[start:start + 1] == b"\n":
             start += 1
 
-        end = streamObject.find(b"endstream", start)
-        decompressed = zlib.decompress(streamObject[start:end])
+        end = streamObject.rfind(b"endstream")
+        decompressed = zlib.decompressobj().decompress(streamObject[start:end])
 
         #the start of the stream is a list like: id1 offset1 id2 offset2 ...
         numbers = decompressed[:first].split()
@@ -101,26 +139,15 @@ def PDFToWord(PDFPath):
 
     RootObjectID = RootObjectIDFunc(PDFPath)
 
-    RootObjectLocation = XrefTable[RootObjectID]
-
-    PDF.seek(RootObjectLocation)
-    buffer = PDF.read()
-
     CatalogObjectID = RootObjectID
 
-    catalogObjectLocation = XrefTable[CatalogObjectID]
-
-    PDF.seek(catalogObjectLocation)
-    buffer = PDF.read(1024)
+    buffer = GetObjectBytes(CatalogObjectID)
 
     pagesRefMatch = re.search(rb'/Pages\s+(\d+)\s+(\d+)\s+R', buffer)
 
     if pagesRefMatch:
         pagesObjectID = int(pagesRefMatch.group(1))
-        pagesObjectLocation = XrefTable[pagesObjectID]
-
-        PDF.seek(pagesObjectLocation)
-        pagesBuffer = PDF.read(1024)
+        pagesBuffer = GetObjectBytes(pagesObjectID)
 
         countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
         
@@ -129,6 +156,7 @@ def PDFToWord(PDFPath):
         else:
             numberOfPages = 0
     else:
+        pagesObjectID = None
         numberOfPages = 0
 
     def imageDictFinder(XObjectOffset):
@@ -155,6 +183,15 @@ def PDFToWord(PDFPath):
 
             return images
 
+    #Turns the hex destination of a cmap entry into text (UTF-16BE, so ligatures like fi and surrogate pairs work)
+    def hexToText(hexStr):
+        hexStr = re.sub(r"\s+", "", hexStr)
+        if len(hexStr) <= 2:
+            return chr(int(hexStr, 16)) if hexStr else ""
+        if len(hexStr) % 4:
+            hexStr = hexStr.zfill(len(hexStr) + 4 - len(hexStr) % 4)
+        return bytes.fromhex(hexStr).decode("utf-16-be", errors="ignore")
+
     #This function parses /Tounicode Cmap stream into a dictionary map {hex_code: unicode_char}. Copied from ReadPDF.py
     def parseCmap(cmapBytes):
         cmap = {}
@@ -173,12 +210,12 @@ def PDFToWord(PDFPath):
             block = cmapText[pos + 11 : endPos].strip()
             lines = block.splitlines()
             for line in lines:
-                parts = [p.strip("<>") for p in line.split() if p.startswith("<")]
+                parts = re.findall(r"<([0-9A-Fa-f\s]*)>", line)     #works with "<01> <0041>" and "<01><0041>"
                 if len(parts) >= 2:
-                    srcHex, dstHex = parts[0].upper(), parts[1]
+                    srcHex, dstHex = re.sub(r"\s+", "", parts[0]).upper(), parts[1]
                     # Convert hex sequence to string
                     try:
-                        charCode = "".join(chr(int(dstHex[j : j + 4], 16)) for j in range(0, len(dstHex), 4))
+                        charCode = hexToText(dstHex)
                         cmap[srcHex] = charCode
                     except:
                         pass
@@ -196,7 +233,7 @@ def PDFToWord(PDFPath):
 
             block = cmapText[pos + 12 : endPos].strip()
             for line in block.splitlines():
-                parts = line.split()
+                parts = re.findall(r"<([0-9A-Fa-f\s]*)>", line)
                 if len(parts) >= 3:
                     srcStart = parts[0].strip("<>").upper()
                     srcEnd = parts[1].strip("<>").upper()
@@ -209,17 +246,12 @@ def PDFToWord(PDFPath):
 
                             # Range to single array: <srcStart> <srcEnd> [<dst1> <dst2>]
                             if "[" in line:
-                                array_start = line.find("[")
-                                array_end = line.find("]")
-                                arrTokens = [
-                                    t.strip("<>")
-                                    for t in line[array_start + 1 : array_end].split()
-                                ]
+                                arrTokens = parts[2:]
                                 for idx, codeVal in enumerate(range(startVal, endVal + 1)):
                                     if idx < len(arrTokens):
                                         srcKey = f"{codeVal:0{hexLen}X}"
                                         dstHex = arrTokens[idx]
-                                        cmap[srcKey] = chr(int(dstHex, 16))
+                                        cmap[srcKey] = hexToText(dstHex)
                             # Continuous sequence: <srcStart> <srcEnd> <dstStart>
                             else:
                                 dst_start = parts[2].strip("<>")
@@ -236,51 +268,48 @@ def PDFToWord(PDFPath):
 
     #Function which extracts and decompresses a PDF stream object
     def readandDecompressStream(objectID):
-        if objectID not in XrefTable:
-            return b""
-        PDF.seek(XrefTable[objectID])
-
-        # read until we actually reach 'endstream' (no fixed 8192 cap)
-        data = b""
-        while b"endstream" not in data:
-            more = PDF.read(65536)
-            if not more:
-                break
-            data += more
+        data = GetObjectBytes(objectID)
 
         m = re.search(rb"stream\r?\n", data)
         if not m:
             return b""
         header = data[:m.start()]
         end = data.find(b"endstream", m.end())
+        lengthMatch = re.search(rb"/Length\s+(\d+)(?!\d|\s+\d+\s+R)", header)
+        if lengthMatch and data[m.end() + int(lengthMatch.group(1)):].lstrip().startswith(b"endstream"):
+            end = m.end() + int(lengthMatch.group(1))
         raw = data[m.end():end if end != -1 else len(data)]
         if raw.endswith(b"\r\n"):
             raw = raw[:-2]
         elif raw.endswith(b"\n") or raw.endswith(b"\r"):
             raw = raw[:-1]
 
-        if b"/FlateDecode" in header:
-            try:
-                return zlib.decompressobj().decompress(raw)   # tolerates trailing junk
-            except zlib.error:
-                try:
-                    return zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw)
-                except zlib.error:
-                    return raw
+        #apply every filter the stream lists, in order (e.g. [/ASCII85Decode /FlateDecode] from ReportLab)
+        filterMatch = re.search(rb"/Filter\s*(\[[^\]]*\]|/[A-Za-z0-9]+)", header)
+        try:
+            for name in re.findall(rb"/([A-Za-z0-9]+)", filterMatch.group(1)) if filterMatch else []:
+                if name in (b"ASCIIHexDecode", b"AHx"):
+                    hexDigits = re.sub(rb"[^0-9A-Fa-f]", b"", raw.split(b">")[0])
+                    raw = bytes.fromhex((hexDigits + b"0" * (len(hexDigits) % 2)).decode())
+                elif name in (b"ASCII85Decode", b"A85"):
+                    raw = raw.strip()
+                    if raw.startswith(b"<~"):
+                        raw = raw[2:]
+                    if raw.endswith(b"~>"):
+                        raw = raw[:-2]
+                    raw = base64.a85decode(raw)
+                elif name in (b"FlateDecode", b"Fl"):
+                    try:
+                        raw = zlib.decompressobj().decompress(raw)   # tolerates trailing junk
+                    except zlib.error:
+                        raw = zlib.decompressobj(-zlib.MAX_WBITS).decompress(raw)
+        except Exception:
+            pass
         return raw
 
     def readObject(objID):
         #Return the raw bytes of exactly one object (up to its endobj).
-        if objID not in XrefTable:
-            return b""
-        PDF.seek(XrefTable[objID])
-        data = b""
-        while b"endobj" not in data:
-            more = PDF.read(4096)
-            if not more:
-                break
-            data += more
-        return data.split(b"endobj")[0]
+        return GetObjectBytes(objID).split(b"endobj")[0]
 
     fontInfo = {}   #font resource name -> BaseFont, refilled for every page by fontDictFinder
 
@@ -379,13 +408,24 @@ def PDFToWord(PDFPath):
                 fontcMaps[name] = parseCmap(readandDecompressStream(int(tu.group(1))))
         return fontcMaps
 
+    #Page attributes like /Resources and /MediaBox can be written only on a parent /Pages node, so walk up through /Parent until one has the key
+    def findInherited(pageBuffer, key):
+        current = pageBuffer
+        for _ in range(32):
+            if key in current:
+                return current
+            parent = re.search(rb"/Parent\s+(\d+)\s+\d+\s+R", current)
+            if not parent:
+                break
+            current = readObject(int(parent.group(1)))
+        return pageBuffer
+
     allElements = []
 
-    def pageParser(currentLocation):
+    def pageParser(currentObjectID):
         pagesIDGenList = []
 
-        PDF.seek(currentLocation)
-        buffer = PDF.read(2048)
+        buffer = readObject(currentObjectID)
         
         kidsIndex = buffer.find(b"/Kids")
 
@@ -408,7 +448,6 @@ def PDFToWord(PDFPath):
             pageID = pages[0]
             pageGen = pages[1]
 
-            pageLocation = XrefTable[pageID]
             buffer = readObject(pageID)
 
             contentIndex = buffer.find(b"/Contents")
@@ -437,12 +476,13 @@ def PDFToWord(PDFPath):
                 textBlockPattern = re.compile(rb'\bBT\b(.*?)\bET\b', re.DOTALL)
 
                 #Getting the fontsCMap table
-                resourceIndex = buffer.find(b"/Resources")
-                resBuffer = buffer
+                resSource = findInherited(buffer, b"/Resources")   #Resources can be inherited from a parent /Pages node
+                resourceIndex = resSource.find(b"/Resources")
+                resBuffer = resSource
                 fontInfo.clear()
 
                 if resourceIndex != -1: 
-                    resourceLine = buffer[resourceIndex:].split(b"\n")[0]
+                    resourceLine = resSource[resourceIndex:].split(b"\n")[0]
                     resourceList = resourceLine.split() #This will get us the list of stuff around /resources. There the object id of resources would be written in the next index. We will use the Xreftabelo and object id to get the location of resources 
 
                     resourceObject = None
@@ -454,18 +494,20 @@ def PDFToWord(PDFPath):
                                     resourceObjectID = int(resourceList[idx + 1].decode("latin1"))
                                     break
 
-                    resBuffer = buffer
+                    resBuffer = resSource
                     if resourceObjectID and resourceObjectID in XrefTable:
                             resBuffer = readObject(resourceObjectID)     #PDF.read(4096)
 
                 #Images processing
-                XObjectPattern = rb"/XObject<<\s*/([^ ]+)\s+(\d+\s+\d+\s+R)"
+                XObjectPattern = rb"/XObject\s*<<\s*/([^\s/<>]+)\s+(\d+\s+\d+\s+R)"
                 XObject = re.search(XObjectPattern, resBuffer)
-                XObjectName = XObject.group(1)
-                XObjectAddress = int(XObject.group(2).split()[0])
-                XObjectOffset = XrefTable[XObjectAddress]
-
-                imageDict = imageDictFinder(XObjectOffset)
+                imageDict = []
+                if XObject:       #imageDictFinder scans the whole file
+                    try:
+                        XObjectAddress = int(XObject.group(2).split()[0])
+                        imageDict = imageDictFinder(XrefTable[XObjectAddress]['offset'])
+                    except Exception:
+                        imageDict = []
 
                 #with open("Outputs/image.jpg", "wb") as img:
                 #    img.write(imageDict["imageBytes"])
@@ -529,13 +571,18 @@ def PDFToWord(PDFPath):
                             ctmNow = (a*a0 + b*c0, a*b0 + b*d0, c*a0 + d*c0, c*b0 + d*d0, e*a0 + f*c0 + e0, e*b0 + f*d0 + f0)
                         opIdx += 1
                     textBlocks.append((bm.group(1), ctmNow))
-                extractedElements = [{'type': 'pageStart'}]
+                box = None
+                mediaBox = re.search(rb"/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]", findInherited(buffer, b"/MediaBox"))
+                if mediaBox:
+                    bx0, by0, bx1, by1 = [float(v) for v in mediaBox.groups()]
+                    box = (min(bx0, bx1), min(by0, by1), max(bx0, bx1), max(by0, by1))
+                extractedElements = [{'type': 'pageStart', 'box': box}]
 
                 for block, ctm in textBlocks:
                     blockElements = [(-1, {'type': 'blockStart', 'ctm': ctm})]
 
                     #Font details               
-                    TfPattern = re.compile(rb'/([A-Za-z0-9\._\-]+)\s+(\d+\.?\d*)\s+Tf')
+                    TfPattern = re.compile(rb'/([^\s/<>\[\]()]+)\s+(-?(?:\d+\.?\d*|\.\d+))\s+Tf')
                     for match in TfPattern.finditer(block):
                         fontName, fontSize = match.groups()
                         blockElements.append((match.start(), {'type': 'font', 'name': fontName.decode('latin1'), 'size': float(fontSize), 'base': fontInfo.get(fontName.decode('latin1'))}))
@@ -547,12 +594,12 @@ def PDFToWord(PDFPath):
                         blockElements.append((match.start(), {'type': 'matrix', 'a': float(a), 'b': float(b), 'c': float(c), 'd': float(d), 'x': float(e), 'y': float(f)}))
 
                     #Text rise (Ts)
-                    TsPattern = re.compile(rb'(-?\d+\.?\d*)\s+Ts')
+                    TsPattern = re.compile(rb'(-?(?:\d+\.?\d*|\.\d+))\s+Ts')
                     for match in TsPattern.finditer(block):
                         blockElements.append((match.start(), {'type': "rise", 'value': float(match.group(1))}))
 
                     #Text leading (TL)
-                    TLPattern = re.compile(rb'(-?\d+\.?\d*)\s+TL')
+                    TLPattern = re.compile(rb'(-?(?:\d+\.?\d*|\.\d+))\s+TL')
                     for match in TLPattern.finditer(block):
                         blockElements.append((match.start(), {'type': 'leading', 'value': float(match.group(1))}))
 
@@ -562,7 +609,7 @@ def PDFToWord(PDFPath):
                         blockElements.append((match.start(), {'type': 'renderingMode', 'mode': float(match.group(1))}))              
 
                     #Text positions
-                    TDPattern = re.compile(rb'(-?\d+\.?\d*)\s+(-?\d+\.?\d*)\s+(Td|TD)')
+                    TDPattern = re.compile(rb'(-?(?:\d+\.?\d*|\.\d+))\s+(-?(?:\d+\.?\d*|\.\d+))\s+(Td|TD)')
                     for match in TDPattern.finditer(block):
                         xOffset, yOffset, operator = match.groups()
                         blockElements.append((match.start(), {'type': 'position', 'dx': float(xOffset), 'dy': float(yOffset), 'operator': operator.decode('latin1')}))              
@@ -576,6 +623,9 @@ def PDFToWord(PDFPath):
                     TjPattern = re.compile(rb'(?:\(((?:\\.|[^\\()])*)\)|<([0-9A-Fa-f\s]+)>)\s*(Tj|\'|")', re.DOTALL)
                     for match in TjPattern.finditer(block):
                         literalString, HexString, operator = match.groups()
+
+                        if operator in (b"'", b'"'):
+                            blockElements.append((match.start(), {'type': 'newline'}))
 
                         if literalString is not None:
                             blockElements.append((match.start(), {'type': 'textHex', 'content': pdfUnescape(literalString).hex().upper().encode('ascii')}))
@@ -644,9 +694,10 @@ def PDFToWord(PDFPath):
                 allElements.extend(extractedElements)
             
             elif subkidsIndex != -1:
-                pageParser(pageLocation)
+                pageParser(pageID)
 
-    pageParser(pagesObjectLocation)
+    if pagesObjectID:
+        pageParser(pagesObjectID)
     extractedElements = allElements
 
     #Turns a PDF BaseFont like "ABCDEF+DejaVuSans-Bold" into (Word font name, bold, italic)
@@ -678,6 +729,7 @@ def PDFToWord(PDFPath):
     base = None
     moved = False
     ctm = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+    pageBox = None
     currentPageSpans = []
 
     def flushPage():
@@ -694,6 +746,7 @@ def PDFToWord(PDFPath):
 
         if t == 'pageStart':
             flushPage()
+            pageBox = element.get('box')
 
         elif t == 'blockStart':
             ctm = element.get('ctm', ctm)
@@ -702,16 +755,16 @@ def PDFToWord(PDFPath):
             moved = True
 
         elif t == 'font':
-            size = element.get('size', 11)
+            size = abs(element.get('size', 11))
             base = element.get('base')
 
         elif t == 'matrix':
-            scale = abs(element['d']) if element['d'] else 1.0
+            scale = element['d'] if element['d'] else 1.0      #keeps its sign so flipped PDFs (Chrome, Cairo) still read top to bottom
             x, y = element['x'], element['y']
             moved = True
 
         elif t == 'position':
-            x += element['dx'] * scale
+            x += element['dx'] * abs(scale)
             y += element['dy'] * scale
             if element['operator'] == 'TD':
                 leading = -element['dy']
@@ -726,25 +779,30 @@ def PDFToWord(PDFPath):
 
         elif t == 'text':
             txt = element.get('content', '')
-            txt = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', txt)
+            txt = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\ufffe\uffff]', '', txt)   #also drops characters Word's XML can't store
 
             if txt == '':
                 continue
 
-            # Filter out exam footers, page numbers, and copyright stamps
-            if re.match(r'^\d{1,2}$', txt.strip()):
-                continue
-
             family, bold, italic = fontStyle(base)
-            effSize = round(size * scale * abs(ctm[3]), 1)
+            effSize = round(size * abs(scale) * abs(ctm[3]), 1)
             if effSize < 4:
                 effSize = 11
 
             absX = ctm[0] * x + ctm[4]
             absY = ctm[3] * y + ctm[5]
 
-            if absX < 45 or absX > 550:
-                continue
+            cropMargin = 0
+
+            if pageBox:
+                left, bottom, right, top = pageBox
+                if absX < left - 5 or absX > right + 5 or absY < bottom - 5 or absY > top + 5:
+                    continue                           #outside the page, so never visible
+                if absX < left + cropMargin or absX > right - cropMargin:
+                    continue                           #optional side-margin crop (stamps, margin notes), set with cropMargin
+                #a lone 1-3 digit number in the header/footer strip is a page number, so drop it (numbers in the body are kept)
+                if re.match(r'^\d{1,3}$', txt.strip()) and (absY < bottom + 0.08 * (top - bottom) or absY > top - 0.08 * (top - bottom)):
+                    continue
             
             currentPageSpans.append({'text': txt, 'x': ctm[0] * x + ctm[4], 'y': ctm[3] * y + ctm[5], 'size': effSize, 'font': family,
                           'bold': bold, 'italic': italic, 'moved': moved,
@@ -811,9 +869,12 @@ def PDFToWord(PDFPath):
 
         lastY, lastSize = s['y'], s['size']
 
-    os.makedirs("Outputs", exist_ok=True)
     outputPath = "Outputs/converted_document.docx"
+
+    os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
     doc.save(outputPath)
+    PDF.close()
     print("done")
+    return outputPath
 
 PDFToWord("Inputs/emaar1.pdf")
