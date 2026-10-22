@@ -16,3 +16,11 @@ The working of the SplitPDF is:
 Coded by Anael
 
 I just found out that there are actually two types of pdf. Due to this a lot of the code would have to be rewritten to accomodate the second type. 
+
+The new pdf strucuture has flate compressed binary stream. That's why all the object streams are compressed inside other objects 
+
+I am also trying to get the function really versatile that's why I got some bad cases from claude like encryption and added them.
+
+The new approach for the file is:
+1. I have made a new function GetObjectBytes(id). This is what everything works on. If the object is normal, it gets the object bytes. If it's compressed, it calls the other func ReadObjectSream  which reads the container, decompresses it an then it wraps in the normal format of obj end obj. So this way compressed is turned into a normal kind of object. 
+2. And the rest is kind of same as the old code. 

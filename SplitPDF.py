@@ -3,56 +3,123 @@
 import os
 from helperfunctions import * 
 import re
+import zlib
 
 def SplitPDF(PDFPath, splitPage):
     PDF = open(PDFPath, "rb")
 
     PDFSize = os.path.getsize(PDFPath) - 1
-
     PDFVersion = PDFVersionFunc(PDFPath)
 
     xrefResult = XrefTableFunc(PDFPath)
 
     if isinstance(xrefResult, tuple):
-        XrefTable, XrefTableAddress = xrefResult
+        AllXrefTable, XrefTableAddress = xrefResult
     else:
-        XrefTable = xrefResult
-        XrefTableAddress = [list(XrefTable.values())[0]['offset']] if XrefTable else [0]
+        AllXrefTable = xrefResult
+
+        firstEntry = next(iter(AllXrefTable.values())) if AllXrefTable else 0
+        firstOffset = firstEntry.get('offset', 0) if isinstance(firstEntry, dict) else firstEntry
+        XrefTableAddress = [firstOffset] if AllXrefTable else [0]
 
     if isinstance(XrefTableAddress, list) and XrefTableAddress:
         XrefTableAddress = XrefTableAddress[-1]
 
+    XrefTable = AllXrefTable
+
+    PDF.seek(0)
+    if re.search(rb'/Encrypt\s+\d+\s+\d+\s+R|/Encrypt\s*<<', PDF.read()):
+        raise ValueError("This PDF is encrypted. Remove the encryption first.")
+
+    validOffsets = []
+    for entry in XrefTable.values():
+        if entry.get('type') == "n": #only objects that really sit in the file
+            validOffsets.append(entry['offset'])
+
+    sortedOffsets = sorted(set(validOffsets))
+    sortedOffsets.append(XrefTableAddress)
+
+    objStmCache = {} #so every object stream is only decompressed once
+
+    #Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
+    def GetObjectBytes(objectID):
+        entry = XrefTable.get(objectID)
+
+        if not entry or entry.get('type') == "f":
+            return b""
+
+        if entry.get('type') == "compressedInsideStream":
+            #for these, 'offset' is NOT a file position. It is the ID of the object stream that holds it
+            body = ReadObjectStream(entry['offset']).get(objectID, b"")
+            return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
+
+        startOffset = entry['offset']
+        try:
+            currentIndex = sortedOffsets.index(startOffset)
+            length = sortedOffsets[currentIndex + 1] - startOffset
+        except:
+            length = 2048
+
+        PDF.seek(startOffset)
+        return PDF.read(length)
+
+    #Opens one object stream and returns {objectID: bytes of that object}
+    def ReadObjectStream(streamID):
+        if streamID in objStmCache:
+            return objStmCache[streamID]
+
+        streamObject = GetObjectBytes(streamID)
+
+        count = int(re.search(rb'/N\s+(\d+)', streamObject).group(1))     #how many objects are inside
+        first = int(re.search(rb'/First\s+(\d+)', streamObject).group(1))  #where the objects start after the id/offset list
+
+        start = streamObject.find(b"stream") + 6
+        if streamObject[start:start + 2] == b"\r\n":
+            start += 2
+        elif streamObject[start:start + 1] == b"\n":
+            start += 1
+
+        end = streamObject.find(b"endstream", start)
+        decompressed = zlib.decompress(streamObject[start:end])
+
+        #the start of the stream is a list like: id1 offset1 id2 offset2 ...
+        numbers = decompressed[:first].split()
+        result = {}
+        for i in range(count):
+            objectID = int(numbers[2 * i])
+            offset = int(numbers[2 * i + 1])
+            if i + 1 < count:
+                nextOffset = int(numbers[2 * i + 3])
+            else:
+                nextOffset = len(decompressed) - first
+            result[objectID] = decompressed[first + offset: first + nextOffset].strip()
+
+        objStmCache[streamID] = result
+        return result
+
     RootObjectID = RootObjectIDFunc(PDFPath)
-
-    RootObjectLocation = XrefTable[RootObjectID]
-
-    PDF.seek(RootObjectLocation)
-    buffer = PDF.read()
-
     catalogObjectID = RootObjectID #Root and catalog are the same object
 
-    catalogObjectLocation = XrefTable[catalogObjectID]
-
-    PDF.seek(catalogObjectLocation)
-    buffer = PDF.read(1024)
+    buffer = GetObjectBytes(catalogObjectID)
 
     pagesRefMatch = re.search(rb'/Pages\s+(\d+)\s+(\d+)\s+R', buffer)
+    numberOfPages = 0
 
     if pagesRefMatch:
         pagesObjectID = int(pagesRefMatch.group(1))
-        pagesObjectLocation = XrefTable[pagesObjectID]
+        pagesBuffer = GetObjectBytes(pagesObjectID)
 
-        PDF.seek(pagesObjectLocation)
-        pagesBuffer = PDF.read(1024)
+        countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
 
+        if countMatch:
+            numberOfPages = int(countMatch.group(1))
+
+    #print("Number of pages:", numberOfPages) #temporary test line
+    
         countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
         
         if countMatch:
             numberOfPages = int(countMatch.group(1))
-        else:
-            numberOfPages = 0
-    else:
-        numberOfPages = 0
 
     pagesData = []
 
@@ -94,7 +161,7 @@ def SplitPDF(PDFPath, splitPage):
 
         #This code is excluding the pages themselves from the dependency list
         for dependencyID in allDependencies:
-            if dependencyID not in partPages:
+            if dependencyID not in targetPageIDS:
                 dependencyIDsToMap.append(dependencyID)
 
         for pageID in dependencyIDsToMap:
@@ -104,9 +171,7 @@ def SplitPDF(PDFPath, splitPage):
 
         newXrefTable = {}
 
-        sortedOffsets = sorted(set(newXrefTable.values()))
-
-        #Join all kis with a space
+        #Join all kids with a space
         kidsArrayStr = " ".join(pageRefs)
         pageCount = len(partPages)
 
@@ -134,9 +199,10 @@ def SplitPDF(PDFPath, splitPage):
         #This function updates the objectIDs inside object headers and refs
         def replaceRefs(match):
             refID = int(match.group(1))
-            generationNumber = match.group(2)
+            genNum = match.group(2).decode('latin1')
+            
             if refID in idMap:
-                return f"{idMap[refID]} {generationNumber.decode('latin1')} R".encode('latin1')
+                return f"{idMap[refID]} {genNum} R".encode('latin1')
             return match.group(0)
 
         with open(outputFilename, "wb") as outputPDF:
@@ -156,32 +222,37 @@ def SplitPDF(PDFPath, splitPage):
             objectRefPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
             parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
 
-            #sorting the original xreftable
-            sortedSourceOffsets = sorted(set(XrefTable.values()))
-            sortedSourceOffsets.append(XrefTableAddress)
-
             #processing all objects now 
             allOldIDsToWrite = targetPageIDS + dependencyIDsToMap
 
             for oldID in allOldIDsToWrite:
                 newID = idMap[oldID]
-                oldOffset = XrefTable[oldID]
 
-                #Get the object length 
-                currentIndex = sortedSourceOffsets.index(oldOffset)
-                endOffset = sortedSourceOffsets[currentIndex + 1]
-                length = endOffset - oldOffset
+                objectBuffer = GetObjectBytes(oldID)
 
-                PDF.seek(oldOffset)
-                objectBuffer = PDF.read(length)
+                if not objectBuffer:
+                    #the object is missing or free. I write an empty object so the numbering stays complete
+                    objectBuffer = f"{newID} 0 obj\nnull\nendobj\n".encode('latin1')
+                else:
+                    #Split into the dictionary part and the stream part. Only the dictionary part can be changed
+                    streamMatch = re.search(rb'>>\s*stream', objectBuffer)
+                    if streamMatch:
+                        splitAt = streamMatch.start() + 2
+                    else:
+                        splitAt = len(objectBuffer)
 
-                #changing into the new ID header
-                objectBuffer = re.sub(rb'^\d+\s+\d+\s+obj', f"{newID} 0 obj".encode('latin1'), objectBuffer)
+                    dictionaryPart = objectBuffer[:splitAt]
+                    streamPart = objectBuffer[splitAt:]
 
-                #changing ref
-                objectBuffer = objectRefPattern.sub(replaceRefs, objectBuffer)
-                objectBuffer = parentPattern.sub(f"/Parent {pagesID} 0 R".encode('latin1'), objectBuffer)
+                    #changing into the new ID header
+                    dictionaryPart = re.sub(rb'^\d+\s+\d+\s+obj', f"{newID} 0 obj".encode('latin1'), dictionaryPart)
 
+                    #changing ref
+                    dictionaryPart = objectRefPattern.sub(replaceRefs, dictionaryPart)
+                    dictionaryPart = parentPattern.sub(f"/Parent {pagesID} 0 R".encode('latin1'), dictionaryPart)
+
+                    objectBuffer = dictionaryPart + streamPart
+                
                 #write objects
                 newXrefTable[newID] = outputPDF.tell()
                 outputPDF.write(objectBuffer)
@@ -209,11 +280,10 @@ def SplitPDF(PDFPath, splitPage):
 
             outputPDF.write(trailerBytes)
 
-    def pageParser(currentLocation):    
+    def pageParser(currentObjectID):    
         pagesIDGenList = []
 
-        PDF.seek(currentLocation)
-        buffer = PDF.read(2048)
+        buffer = GetObjectBytes(currentObjectID)
         
         kidsIndex = buffer.find(b"/Kids")
 
@@ -235,9 +305,9 @@ def SplitPDF(PDFPath, splitPage):
             pageID = pages[0]
             pageGen = pages[1]
 
-            pageLocation = XrefTable[pageID]
-            PDF.seek(pageLocation)
-            buffer = PDF.read(1024)
+            buffer = GetObjectBytes(pageID)
+            if not buffer:
+                continue
 
             contentIndex = buffer.find(b"/Contents")
             subkidsIndex = buffer.find(b"/Kids")
@@ -251,28 +321,27 @@ def SplitPDF(PDFPath, splitPage):
                     startBracket = buffer.find(b"[", MediaBoxIndex)
                     endBracket = buffer.find(b"]", startBracket)
 
-                    MediaBoxByteList = buffer[startBracket + 1 : endBracket]
-                    MediaBoxByteList = MediaBoxByteList.split()
+                    MediaBoxByteList = buffer[startBracket + 1 : endBracket].split()
 
-                    i = 0 
-                    for i in range(len(MediaBoxByteList)):
-                        valueString = MediaBoxByteList[i].decode('latin1')
-                        MediaBoxList.append(int(float(valueString)))
-
+                    for value in MediaBoxByteList:
+                        MediaBoxList.append(int(float(value.decode('latin1'))))
 
                     if not MediaBoxList or len(MediaBoxList) != 4:
-                        MediaBoxList = [0, 0, 612, 792] #Default mediabox
+                        MediaBoxList = [0, 0, 612, 792]
 
                 #Rotate
                 Rotate = 0 #This is the default rotate 
 
                 #contents
-                contentsPattern = re.compile(rb'/Contents\s+(\d+)')
-                contents = contentsPattern.search(buffer)
-                if contents:
-                    contentObjectID = int(contents.group(1))
+                contentsMatch = re.search(rb'/Contents\s+(\d+)\s+\d+\s+R', buffer)
+
+                if not contentsMatch:
+                    contentsMatch = re.search(rb'/Contents\s+(\d+)', buffer)
+
+                if contentsMatch:
+                    contentObjectID = int(contentsMatch.group(1))
                 else: 
-                    contentObjectID = None 
+                    contentObjectID = None
 
                 #resources
                 resourcesPattern = re.compile(rb'/Resources\s+(\d+)')
@@ -293,9 +362,6 @@ def SplitPDF(PDFPath, splitPage):
                     dependencies = []
                     processing = [pageID]
 
-                    sortedOffsets = sorted(set(XrefTable.values()))
-                    sortedOffsets.append(XrefTableAddress)
-
                     while processing:                      
                         currentID = processing.pop()
 
@@ -305,21 +371,19 @@ def SplitPDF(PDFPath, splitPage):
                         visitedIDs.append(currentID)
                         dependencies.append(currentID)
 
-                        startOffset = XrefTable[currentID]
-                        currentIndex = sortedOffsets.index(startOffset)
-                        endOffset = sortedOffsets[currentIndex + 1]
-                        length = endOffset - startOffset
+                        buffer = GetObjectBytes(currentID)
 
-                        PDF.seek(startOffset)
-                        buffer = PDF.read(length)
-
+                        streamMatch = re.search(rb'>>\s*stream', buffer)
+                        if streamMatch:
+                            buffer = buffer[:streamMatch.start() + 2]
+                        
                         parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
                         cleanedBytes = parentPattern.sub(b'', buffer)
 
                         objectPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
                         objectsRawBytes = objectPattern.findall(cleanedBytes)
 
-                        for objectIDbytes, objectGenBytes in objectsRawBytes:
+                        for objectIDbytes, _ in objectsRawBytes:
                             refID = int(objectIDbytes)
                             if refID != currentID and refID not in visitedIDs:
                                 processing.append(refID)
@@ -328,7 +392,8 @@ def SplitPDF(PDFPath, splitPage):
 
                 dependencies = dependencyCollecter(pageID)
 
-                pageEntry = {"pageIndex": len(pagesData) + 1, #index
+                pageEntry = {
+                "pageIndex": len(pagesData) + 1, #index
                 "objectID": [pageID, pageGen], #[ID, Generation]
                 "inheritedAttributes": {"MediaBox": MediaBoxList, "Rotate": Rotate}, #Just extract
                 "directReferences": {"contents": contentObjectID, "resources": resourcesObjectID}, #Objet ID for /Contents streams, Object ID for /Resources 
@@ -338,11 +403,25 @@ def SplitPDF(PDFPath, splitPage):
                 pagesData.append(pageEntry)
 
             elif subkidsIndex != -1:
-                pageParser(pageLocation)
+                pageParser(pageID)
 
-    pageParser(pagesObjectLocation) #This will make the list pagesData which will have all data required for each page
+    catBuffer = GetObjectBytes(catalogObjectID)
 
-    #print(pagesData)
+    pagesMatch = re.search(rb'/Pages\s+(\d+)\s+\d+\s+R', catBuffer)
+
+    if pagesMatch:
+        pagesObjID = int(pagesMatch.group(1))
+        pageParser(pagesObjID)
+
+    #print("Pages found:", len(pagesData))
+
+    if not pagesData:
+        raise ValueError("No pages were found. The file may be damaged or not supported.")
+
+    numberOfPages = len(pagesData) #trust the pages I really found, not the /Count number
+
+    if splitPage < 2 or splitPage > numberOfPages:
+        raise ValueError(f"splitPage must be between 2 and {numberOfPages}")
 
     #Now I will get the user split page input
     #extract the target pages data frm pagesData
@@ -362,8 +441,8 @@ def SplitPDF(PDFPath, splitPage):
     part2Pages = pagesData[part1Index:part2Index]
 
     #I will now get the objects needed for each part. I amd doing for part 1
-    requiredObjectIDS = set() #using datatype set so the list doesn't have repeated values 
-    pageObjectIDs = []
+    #requiredObjectIDS = set() #using datatype set so the list doesn't have repeated values 
+    #pageObjectIDs = []
 
     PDFName = os.path.basename(PDFPath).split(".")[0]
 
@@ -372,4 +451,4 @@ def SplitPDF(PDFPath, splitPage):
 
     PDF.close()  
 
-SplitPDF("Inputs/9709_w24_qp_11.pdf", 11)
+SplitPDF("Inputs/emaar1.pdf", 20)

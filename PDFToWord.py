@@ -17,7 +17,87 @@ def PDFToWord(PDFPath):
 
     PDFVersion = PDFVersionFunc(PDFPath)
 
-    XrefTable, XrefTableAddress = XrefTableFunc(PDFPath)
+    xrefResult = XrefTableFunc(PDFPath)
+
+    if isinstance(xrefResult, tuple):
+        AllXrefTable, XrefTableAddress = xrefResult
+    else:
+        AllXrefTable = xrefResult
+
+        firstEntry = next(iter(AllXrefTable.values())) if AllXrefTable else 0
+        firstOffset = firstEntry.get('offset', 0) if isinstance(firstEntry, dict) else firstEntry
+        XrefTableAddress = [firstOffset] if AllXrefTable else [0]
+
+    if isinstance(XrefTableAddress, list) and XrefTableAddress:
+        XrefTableAddress = XrefTableAddress[-1]
+
+    XrefTable = AllXrefTable
+
+    validOffsets = []
+    for entry in XrefTable.values():
+        if entry.get('type') == "n": #only objects that really sit in the file
+            validOffsets.append(entry['offset'])
+
+    sortedOffsets = sorted(set(validOffsets))
+    sortedOffsets.append(XrefTableAddress)
+
+    objStmCache = {} #so every object stream is only decompressed once
+
+    #Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
+    def GetObjectBytes(objectID):
+        entry = XrefTable.get(objectID)
+
+        if not entry or entry.get('type') == "f":
+            return b""
+
+        if entry.get('type') == "compressedInsideStream":
+            #for these, 'offset' is NOT a file position. It is the ID of the object stream that holds it
+            body = ReadObjectStream(entry['offset']).get(objectID, b"")
+            return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
+
+        startOffset = entry['offset']
+        try:
+            currentIndex = sortedOffsets.index(startOffset)
+            length = sortedOffsets[currentIndex + 1] - startOffset
+        except:
+            length = 2048
+
+        PDF.seek(startOffset)
+        return PDF.read(length)
+
+    #Opens one object stream and returns {objectID: bytes of that object}
+    def ReadObjectStream(streamID):
+        if streamID in objStmCache:
+            return objStmCache[streamID]
+
+        streamObject = GetObjectBytes(streamID)
+
+        count = int(re.search(rb'/N\s+(\d+)', streamObject).group(1))     #how many objects are inside
+        first = int(re.search(rb'/First\s+(\d+)', streamObject).group(1))  #where the objects start after the id/offset list
+
+        start = streamObject.find(b"stream") + 6
+        if streamObject[start:start + 2] == b"\r\n":
+            start += 2
+        elif streamObject[start:start + 1] == b"\n":
+            start += 1
+
+        end = streamObject.find(b"endstream", start)
+        decompressed = zlib.decompress(streamObject[start:end])
+
+        #the start of the stream is a list like: id1 offset1 id2 offset2 ...
+        numbers = decompressed[:first].split()
+        result = {}
+        for i in range(count):
+            objectID = int(numbers[2 * i])
+            offset = int(numbers[2 * i + 1])
+            if i + 1 < count:
+                nextOffset = int(numbers[2 * i + 3])
+            else:
+                nextOffset = len(decompressed) - first
+            result[objectID] = decompressed[first + offset: first + nextOffset].strip()
+
+        objStmCache[streamID] = result
+        return result
 
     RootObjectID = RootObjectIDFunc(PDFPath)
 

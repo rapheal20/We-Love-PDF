@@ -222,29 +222,16 @@ def XrefTableFunc(PDFPath):
 
 #Returns the RootObjectID of the PDF
 def RootObjectIDFunc(PDFPath):
-    PDF = open(PDFPath, "rb")
-    PDFSize = os.path.getsize(PDFPath) - 1
+    with open(PDFPath, "rb") as PDF:
+        content = PDF.read()
 
-    bufferSize = min(4096, PDFSize)
+    #The last /Root in the file belongs to the newest version of the file
+    allRoots = re.findall(rb'/Root\s+(\d+)\s+\d+\s+R', content)
 
-    PDF.seek(PDFSize - bufferSize)
-    buffer = PDF.read()
+    if allRoots:
+        return int(allRoots[-1])
 
-    rootObject = re.search(rb'/Root\s+(\d+)\s+\d+\s+R', buffer)
-
-    if rootObject:
-        return int(rootObject.group(1))
-
-    rootobjectAlt = re.search(rb'/Root\s+(\d+)', buffer)
-
-    if rootobjectAlt:
-        return int(rootobjectAlt.group(1))
-    
-    PDF.close()
-
-
-
-
+    return None
 
 
 
@@ -296,10 +283,6 @@ def Make_Xref(objectFindString, FinalPDFStr):
         except:
             xrefStr += "0000000000 65535 f \n"
     return xrefStr, numberOfObj 
-
-
-
-
 
 #remaps the ids of PDF with the new ids
 #returns the new pdf string, can be directly used
