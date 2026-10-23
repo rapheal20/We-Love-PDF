@@ -5,6 +5,7 @@ import os
 import re 
 import zlib
 import base64
+import io
 from helperfunctions import *
 from docx import Document 
 from docx.shared import Pt
@@ -232,7 +233,7 @@ def PDFToWord(PDFPath):
                 break
 
             block = cmapText[pos + 12 : endPos].strip()
-            for line in block.splitlines():
+            for line in re.findall(r"<[^>]*>\s*<[^>]*>\s*(?:\[[^\]]*\]|<[^>]*>)", block):   #a range can span many lines: <lo> <hi> [ <d1> <d2> ... ]
                 parts = re.findall(r"<([0-9A-Fa-f\s]*)>", line)
                 if len(parts) >= 3:
                     srcStart = parts[0].strip("<>").upper()
@@ -311,7 +312,101 @@ def PDFToWord(PDFPath):
         #Return the raw bytes of exactly one object (up to its endobj).
         return GetObjectBytes(objID).split(b"endobj")[0]
 
+    #Maps the XObject names of a resources dictionary (Im0, R, Fm1...) to object ids
+    def xobjectMap(resBuffer):
+        rr = re.search(rb"/Resources\s*(\d+)\s+\d+\s+R", resBuffer)
+        if rr and b"/XObject" not in resBuffer:
+            resBuffer = readObject(int(rr.group(1)))
+        xm = re.search(rb"/XObject\s*(?:(\d+)\s+\d+\s+R|(<<))", resBuffer)
+        xd = (readObject(int(xm.group(1))) if xm.group(1) else balancedDict(resBuffer, xm.start(2))) if xm else b""
+        return {n.decode('latin1'): int(i) for n, i in re.findall(rb"/([^\s/<>\[\]()]+)\s+(\d+)\s+\d+\s+R", xd)}
+
+    #Inlines every form XObject ("/R Do") into the content, so the text and images drawn inside it are read like page content.
+    #A form has its own resources, so its font/image names are renamed to unique ones and registered with the page
+    def expandForms(content, local, fontsMap, xobjects, depth=0):
+        def inline(m):
+            fid = local.get(m.group(1).decode('latin1'))
+            head = GetObjectBytes(fid).split(b"stream")[0] if fid else b""
+            if not re.search(rb"/Subtype\s*/Form", head) or depth > 5:
+                return m.group(0)
+            pre = f"f{fid}_".encode()
+            resBuf = head
+            rr = re.search(rb"/Resources\s*(\d+)\s+\d+\s+R", head)
+            if rr:
+                resBuf = readObject(int(rr.group(1)))
+            savedInfo, savedUndec = dict(fontInfo), set(undecodable)
+            fontInfo.clear()
+            undecodable.clear()
+            formFonts = fontDictFinder(resBuf)
+            formInfo, formUndec = dict(fontInfo), set(undecodable)
+            fontInfo.clear()
+            fontInfo.update(savedInfo)
+            undecodable.clear()
+            undecodable.update(savedUndec)
+            for n in set(formFonts) | formUndec | set(formInfo):
+                fontsMap[pre.decode() + n] = formFonts.get(n, {})
+                fontInfo[pre.decode() + n] = formInfo.get(n)
+                if n in formUndec:
+                    undecodable.add(pre.decode() + n)
+            formX = xobjectMap(resBuf)
+            body = expandForms(readandDecompressStream(fid), formX, fontsMap, xobjects, depth + 1)
+            def rename(r):
+                n = r.group(1).decode('latin1')
+                return b"/" + pre + r.group(1) + r.group(2) if n in fontsMap_names else r.group(0)
+            fontsMap_names = set(formFonts) | formUndec | set(formInfo)
+            body = re.sub(rb"/([^\s/<>\[\]()]+)(\s+-?[\d.]+\s+Tf\b)", rename, body)
+            def renameImg(r):
+                n = r.group(1).decode('latin1')
+                if n in formX:
+                    xobjects[pre.decode() + n] = formX[n]
+                    return b"/" + pre + r.group(1) + r.group(2)
+                return r.group(0)
+            body = re.sub(rb"/([^\s/<>\[\]()]+)(\s+Do\b)", renameImg, body)
+            mx = re.search(rb"/Matrix\s*\[([^\]]*)\]", head)
+            return b"\nq " + (mx.group(1) + b" cm" if mx else b"") + b"\n" + body + b"\nQ\n"
+        return re.sub(rb"/([^\s/<>\[\]()]+)\s+Do\b", inline, content)
+
+    #Turns an image XObject into PNG/JPEG bytes Word can embed (None if it can't be decoded: masks, indexed colour, CCITT/JBIG2...)
+    def imageBytes(objectID):
+        try:
+            header = GetObjectBytes(objectID).split(b"stream")[0]
+            if not re.search(rb"/Subtype\s*/Image", header) or re.search(rb"/ImageMask\s+true", header):
+                return None
+            raw = readandDecompressStream(objectID)
+            w, h = [int(re.search(rb"/" + k + rb"\s+(\d+)", header).group(1)) for k in (b"Width", b"Height")]
+            smask = re.search(rb"/SMask\s+(\d+)\s+\d+\s+R", header)
+            if re.search(rb"/(DCT|JPX)Decode", header):
+                if smask is None and b"/DCTDecode" in header and raw[6:10] in (b"JFIF", b"Exif"):   #python-docx only accepts JPEGs with these markers
+                    return raw                                    #a JPEG is already a normal image file
+                im = Image.open(io.BytesIO(raw))
+            else:
+                cs = re.search(rb"/ColorSpace\s*(\[[^\]]*\]|/\w+|\d+\s+\d+\s+R)", header)
+                cs = cs.group(1) if cs else b"/DeviceGray"
+                if cs[:1].isdigit():
+                    cs = readObject(int(cs.split()[0]))
+                icc = re.search(rb"/ICCBased\s+(\d+)", cs)
+                n = int(re.search(rb"/N\s+(\d)", readObject(int(icc.group(1)))).group(1)) if icc else 3 if b"RGB" in cs else 4 if b"CMYK" in cs else 1
+                bpc = int(re.search(rb"/BitsPerComponent\s+(\d+)", header).group(1))
+                if b"/Indexed" in cs or (bpc != 8 and not (bpc == 1 and n == 1)):
+                    return None
+                pm = re.search(rb"/Predictor\s+(\d+)", header)
+                if pm and int(pm.group(1)) >= 10:
+                    raw = removePNGPredictor(raw, (w * n * bpc + 7) // 8, 0, max(1, n * bpc // 8))
+                im = Image.frombytes("1" if bpc == 1 else {1: "L", 3: "RGB", 4: "CMYK"}[n], (w, h), raw)
+            if smask:                                              #transparency
+                alpha = Image.open(io.BytesIO(imageBytes(int(smask.group(1))))).convert("L").resize(im.size)
+                im = im.convert("RGB")
+                im.putalpha(alpha)
+            if im.mode not in ("1", "L", "RGB", "RGBA"):
+                im = im.convert("RGB")
+            buf = io.BytesIO()
+            im.save(buf, "PNG")
+            return buf.getvalue()
+        except Exception:
+            return None
+
     fontInfo = {}   #font resource name -> BaseFont, refilled for every page by fontDictFinder
+    undecodable = set()   #two-byte (Identity-H) fonts without a ToUnicode map: their codes can't be turned into text
 
     def pdfUnescape(raw):
         #Decode the escapes inside a PDF literal string ( \\n \\( \\) \\\\ \\ddd ) into bytes
@@ -406,6 +501,8 @@ def PDFToWord(PDFPath):
             tu = re.search(rb"/ToUnicode\s+(\d+)\s+\d+\s+R", fontBuf)
             if tu:
                 fontcMaps[name] = parseCmap(readandDecompressStream(int(tu.group(1))))
+            elif b"/Identity-H" in fontBuf:
+                undecodable.add(name)
         return fontcMaps
 
     #Page attributes like /Resources and /MediaBox can be written only on a parent /Pages node, so walk up through /Parent until one has the key
@@ -480,6 +577,7 @@ def PDFToWord(PDFPath):
                 resourceIndex = resSource.find(b"/Resources")
                 resBuffer = resSource
                 fontInfo.clear()
+                undecodable.clear()
 
                 if resourceIndex != -1: 
                     resourceLine = resSource[resourceIndex:].split(b"\n")[0]
@@ -499,20 +597,10 @@ def PDFToWord(PDFPath):
                             resBuffer = readObject(resourceObjectID)     #PDF.read(4096)
 
                 #Images processing
-                XObjectPattern = rb"/XObject\s*<<\s*/([^\s/<>]+)\s+(\d+\s+\d+\s+R)"
-                XObject = re.search(XObjectPattern, resBuffer)
-                imageDict = []
-                if XObject:       #imageDictFinder scans the whole file
-                    try:
-                        XObjectAddress = int(XObject.group(2).split()[0])
-                        imageDict = imageDictFinder(XrefTable[XObjectAddress]['offset'])
-                    except Exception:
-                        imageDict = []
-
-                #with open("Outputs/image.jpg", "wb") as img:
-                #    img.write(imageDict["imageBytes"])
+                xobjects = xobjectMap(resBuffer)
 
                 fontscMap = fontDictFinder(resBuffer) #This maps each font F1 F2 F5 etc to a dict with each value(but in hexadecimal). but I will do that at the end of the code.
+                decompressedStreamData = expandForms(decompressedStreamData, xobjects, fontscMap, xobjects)
                 
                 cMap = {}
 
@@ -553,30 +641,37 @@ def PDFToWord(PDFPath):
                                         currCode += 1
 
                 #Work out the cm transform active at each BT block so positions are comparable across blocks
-                ctmOps = re.compile(rb'(?<![A-Za-z0-9*])(q|Q)(?![A-Za-z0-9*])|((?:-?[\d.]+\s+){5}-?[\d.]+)\s+cm\b')
+                ctmOps = re.compile(rb'(?<![A-Za-z0-9*])(q|Q)(?![A-Za-z0-9*])|((?:-?[\d.]+\s+){5}-?[\d.]+)\s+cm\b|/([^\s/<>\[\]()]+)\s+Do\b')
                 opsList = list(ctmOps.finditer(decompressedStreamData))
                 ctmStack, ctmNow, opIdx = [], (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), 0
-                textBlocks = []
-                for bm in textBlockPattern.finditer(decompressedStreamData):
-                    while opIdx < len(opsList) and opsList[opIdx].start() < bm.start():
+                textBlocks, placedImages = [], []
+                for bm in list(textBlockPattern.finditer(decompressedStreamData)) + [None]:   #None = the ops after the last text block
+                    while opIdx < len(opsList) and (bm is None or opsList[opIdx].start() < bm.start()):
                         om = opsList[opIdx]
                         if om.group(1) == b'q':
                             ctmStack.append(ctmNow)
                         elif om.group(1) == b'Q':
                             if ctmStack:
                                 ctmNow = ctmStack.pop()
+                        elif om.group(3):
+                            placedImages.append((om.group(3).decode('latin1'), ctmNow))
                         else:
                             a, b, c, d, e, f = [float(v) for v in om.group(2).split()]
                             a0, b0, c0, d0, e0, f0 = ctmNow
                             ctmNow = (a*a0 + b*c0, a*b0 + b*d0, c*a0 + d*c0, c*b0 + d*d0, e*a0 + f*c0 + e0, e*b0 + f*d0 + f0)
                         opIdx += 1
-                    textBlocks.append((bm.group(1), ctmNow))
+                    if bm:
+                        textBlocks.append((bm.group(1), ctmNow))
                 box = None
                 mediaBox = re.search(rb"/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]", findInherited(buffer, b"/MediaBox"))
                 if mediaBox:
                     bx0, by0, bx1, by1 = [float(v) for v in mediaBox.groups()]
                     box = (min(bx0, bx1), min(by0, by1), max(bx0, bx1), max(by0, by1))
                 extractedElements = [{'type': 'pageStart', 'box': box}]
+                for name, m in placedImages:
+                    data = imageBytes(xobjects[name]) if name in xobjects else None
+                    if data and abs(m[0]) > 5 and abs(m[3]) > 5:
+                        extractedElements.append({'type': 'image', 'data': data, 'x': m[4], 'y': max(m[5], m[5] + m[3]), 'w': abs(m[0])})
 
                 for block, ctm in textBlocks:
                     blockElements = [(-1, {'type': 'blockStart', 'ctm': ctm})]
@@ -659,6 +754,8 @@ def PDFToWord(PDFPath):
                             translatedBlockElements.append((position, element))
                         
                         elif element['type'] == 'textHex':
+                            if currentFont in undecodable:
+                                continue
                             rawHex = element['content'].decode('latin1', errors='ignore')
                             cleanHex = re.sub(r'\s+', '', rawHex).upper()
 
@@ -748,6 +845,9 @@ def PDFToWord(PDFPath):
             flushPage()
             pageBox = element.get('box')
 
+        elif t == 'image':
+            currentPageSpans.append(element)
+
         elif t == 'blockStart':
             ctm = element.get('ctm', ctm)
             x = y = 0.0
@@ -783,6 +883,8 @@ def PDFToWord(PDFPath):
 
             if txt == '':
                 continue
+            if re.fullmatch(r'\*\s*\d+\s*\*', txt.strip()) or (len(txt.strip()) >= 10 and len(set(txt.strip())) <= 5 and '.' not in txt):
+                continue                               #barcode labels (*123*, bTTTTuTTh) are not content
 
             family, bold, italic = fontStyle(base)
             effSize = round(size * abs(scale) * abs(ctm[3]), 1)
@@ -824,6 +926,14 @@ def PDFToWord(PDFPath):
             if seenPage:
                 doc.add_page_break()
             seenPage = True
+            para = None
+            continue
+
+        if s.get('type') == 'image':
+            try:
+                doc.add_paragraph().add_run().add_picture(io.BytesIO(s['data']), width=Pt(min(s['w'], 450)))
+            except Exception:
+                pass                                   #an image Word can't take is skipped, not fatal
             para = None
             continue
 
@@ -877,4 +987,4 @@ def PDFToWord(PDFPath):
     print("done")
     return outputPath
 
-PDFToWord("Inputs/emaar1.pdf")
+PDFToWord("Inputs/file-example_PDF_500_kB.pdf")

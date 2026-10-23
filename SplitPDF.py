@@ -108,7 +108,6 @@ def SplitPDF(PDFPath, splitPage):
     if pagesRefMatch:
         pagesObjectID = int(pagesRefMatch.group(1))
         pagesBuffer = GetObjectBytes(pagesObjectID)
-
         countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
 
         if countMatch:
@@ -451,4 +450,4 @@ def SplitPDF(PDFPath, splitPage):
 
     PDF.close()  
 
-SplitPDF("Inputs/emaar1.pdf", 20)
+SplitPDF("Inputs/sample-local-pdf.pdf", 2)

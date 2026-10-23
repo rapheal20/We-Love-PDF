@@ -49,7 +49,7 @@ def parseASCIIXref(PDFcontent: bytes, offset: int, xrefTable: dict):
         index += 1
 
 #I don't really wanna know how this runs so I have copied from Gemini. 
-def removePNGPredictor(data: bytes, columns: int, row_width: int): 
+def removePNGPredictor(data: bytes, columns: int, row_width: int, bpp: int = 1): 
     stride = columns + 1
     out = bytearray()
     prev_row = bytearray(columns)
@@ -64,8 +64,8 @@ def removePNGPredictor(data: bytes, columns: int, row_width: int):
         for c in range(columns):
             raw_byte = curr_filtered[c]
             up = prev_row[c]
-            left = recon_row[c-1] if c > 0 else 0
-            left_up = prev_row[c-1] if c > 0 else 0
+            left = recon_row[c-bpp] if c >= bpp else 0
+            left_up = prev_row[c-bpp] if c >= bpp else 0
             
             if filter_type == 0:   recon = raw_byte # None
             elif filter_type == 1: recon = (raw_byte + left) & 0xFF # Sub
@@ -166,8 +166,6 @@ def parseXrefStream(PDFcontent: bytes, offset: int, xrefTable: dict):
                 "type": typeStr
             }
 
-                 
-
 #Returns XrefTable of the PDF
 def XrefTableFunc(PDFPath):
     xrefTable = {}
@@ -178,7 +176,7 @@ def XrefTableFunc(PDFPath):
 
     startXrefMatches = list(re.finditer(rb"startxref\s+(\d+)", PDFcontent))
 
-    xrefStreamMatches = list(re.finditer(rb"(\d+)\s+(\d+)\s+obj\s*<<[^>]*\/Type\s*\/XRef", PDFcontent)) 
+    xrefStreamMatches = list(re.finditer(rb"(\d+)\s+(\d+)\s+obj\s*<<(?:(?!endobj)[\s\S]){0,600}?\/Type\s*\/XRef", PDFcontent)) 
 
     #First method: Processing using the startxref pointers
     if startXrefMatches:
@@ -194,10 +192,7 @@ def XrefTableFunc(PDFPath):
             if peek.startswith(b"xref"): #Older version
                 parseASCIIXref(PDFcontent, offset, xrefTable)
             else: 
-                objectMatch = re.search(rb"(\d+)\s+(\d+)\s+obj", PDFcontent[max(0, offset-100):offset+50])
-                if objectMatch:
-                    objectID = int(objectMatch.group(1))
-                    parseXrefStream(PDFcontent, PDFcontent.find(f"{objectID} ".encode() + b"0 obj", max(0, offset-200)), xrefTable)
+                parseXrefStream(PDFcontent, offset, xrefTable)
     
     #Second method: hybrid streams
     if xrefStreamMatches:
@@ -307,4 +302,3 @@ def PDF_ID_Remap(PDF_Data, PDFString, OriginalID):
     PDFString = re.sub(r'\b(\d+)\s+0\s+obj\b', Obj_Declaration, PDFString, flags=re.IGNORECASE)
     PDFString = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Reference, PDFString, flags=re.IGNORECASE)
     return PDFString
-

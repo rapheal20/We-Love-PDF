@@ -7,8 +7,8 @@ The features implemented will be:
 1. Merge PDF (Done by Rapheal)
 2. Split PDF (Done by Anael)
 3. Compress PDF (Done by Rapheal)
-4. PDF to Word (work in progress by Anael)
-5. PDF to PowerPoint 
+4. PDF to Word (Done by Anael)
+5. PDF to PowerPoint (Done by Rapheal)
 6. PDF to Excel
 7. Word to PDF 
 8. PowerPoint to PDF
