@@ -1,0 +1,7 @@
+Flask
+PyMuPDF
+python-docx
+Pillow
+requests
+beautifulsoup4
+html5lib
