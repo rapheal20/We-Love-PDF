@@ -8,7 +8,7 @@ import base64
 import io
 from helperfunctions import *
 from docx import Document 
-from docx.shared import Pt
+from docx.shared import Pt, RGBColor; import unicodedata; from docx.opc.constants import RELATIONSHIP_TYPE as RT; from docx.oxml import OxmlElement; from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from PIL import Image
 
@@ -159,30 +159,6 @@ def PDFToWord(PDFPath):
     else:
         pagesObjectID = None
         numberOfPages = 0
-
-    def imageDictFinder(XObjectOffset):
-        images = [] 
-
-        PDF.seek(XObjectOffset)
-        imgBuffer = PDF.read()
-        imagePattern = rb"(\d+\s+\d+\s+obj\s*<<.*?(?:/Subtype\s*/Image).*?>>\s*stream\r?\n)(.*?)(?:\r?\nendstream)"
-        imageBytesArray = re.findall(imagePattern, imgBuffer, re.DOTALL)
-
-        for index, array in enumerate(imageBytesArray):
-            imageHeader = array[0]
-            imageBytes = array[1]
-
-            imageID = re.search(rb"\d+", imageHeader).group().decode()
-
-            imageWidth = re.search(rb"/Width\s+(\d+) ", imageHeader).group(1).decode()
-            imageHeight = re.search(rb"/Height\s+(\d+)", imageHeader).group(1).decode()
-
-            imageFilter =  re.search(rb"/Filter\s*/([A-Za-z0-9]+)", imageHeader).group(1).decode()
-
-            imageDict = {"imageID": imageID, "imageWidth": imageWidth, "imageHeight": imageHeight, "imageBytes": imageBytes}
-            images.append(imageDict)
-
-            return images
 
     #Turns the hex destination of a cmap entry into text (UTF-16BE, so ligatures like fi and surrogate pairs work)
     def hexToText(hexStr):
@@ -346,6 +322,7 @@ def PDFToWord(PDFPath):
             for n in set(formFonts) | formUndec | set(formInfo):
                 fontsMap[pre.decode() + n] = formFonts.get(n, {})
                 fontInfo[pre.decode() + n] = formInfo.get(n)
+                if n in fontWidths: fontWidths[pre.decode() + n] = fontWidths[n]      #the form's widths too, under its renamed font
                 if n in formUndec:
                     undecodable.add(pre.decode() + n)
             formX = xobjectMap(resBuf)
@@ -406,7 +383,8 @@ def PDFToWord(PDFPath):
             return None
 
     fontInfo = {}   #font resource name -> BaseFont, refilled for every page by fontDictFinder
-    undecodable = set()   #two-byte (Identity-H) fonts without a ToUnicode map: their codes can't be turned into text
+    undecodable, fontWidths = set(), {}   #two-byte (Identity-H) fonts without a ToUnicode map: their codes can't be turned into text
+    SYMS = {('AllAndNone', k): v for k, v in {'0093': '(', '0094': ')', '00CC': '\u03c0', '00ED': '\u03b2', '00F6': '\u03b8', '0100': '\u211d', '0101': '\u2208', '0106': '\u2264', '00FA': '>', '00F8': '<'}.items()}   #symbol glyphs whose ToUnicode entry is a plain letter or digit
 
     def pdfUnescape(raw):
         #Decode the escapes inside a PDF literal string ( \\n \\( \\) \\\\ \\ddd ) into bytes
@@ -458,6 +436,24 @@ def PDFToWord(PDFPath):
                 i += 1
         return buf[start:]
 
+    GLYPHS = {'space': ' ', 'bullet': '\u2022', 'hyphen': '-', 'endash': '\u2013', 'emdash': '\u2014', 'quoteright': '\u2019', 'quoteleft': '\u2018', 'quotedblleft': '\u201c', 'quotedblright': '\u201d', 'quotesingle': "'", 'quotedbl': '"',
+              'period': '.', 'comma': ',', 'colon': ':', 'semicolon': ';', 'exclam': '!', 'question': '?', 'parenleft': '(', 'parenright': ')', 'bracketleft': '[', 'bracketright': ']', 'slash': '/', 'plus': '+', 'minus': '-', 'equal': '=', 'less': '<', 'greater': '>',
+              'asterisk': '*', 'ampersand': '&', 'at': '@', 'percent': '%', 'dollar': '$', 'numbersign': '#', 'underscore': '_', 'fi': '\ufb01', 'fl': '\ufb02', 'ellipsis': '\u2026', 'degree': '\u00b0', 'copyright': '\u00a9', 'registered': '\u00ae', 'trademark': '\u2122', 'Euro': '\u20ac', 'germandbls': '\u00df'}
+    GLYPHS.update(zip("zero one two three four five six seven eight nine".split(), "0123456789"))
+    def glyphChar(g):
+        m = re.fullmatch(r'[A-Za-z](acute|grave|circumflex|dieresis|tilde|ring|cedilla|caron)', g)
+        try: return g if len(g) == 1 else GLYPHS[g] if g in GLYPHS else chr(int(g[3:], 16)) if re.fullmatch(r'uni[0-9A-Fa-f]{4}', g) else unicodedata.lookup(f"LATIN {'CAPITAL' if g[0].isupper() else 'SMALL'} LETTER {g[0].upper()} WITH {({'dieresis': 'DIAERESIS', 'ring': 'RING ABOVE'}).get(m.group(1), m.group(1).upper())}")
+        except Exception: return ''
+    def diffMap(arr):
+        out, code = {}, 0
+        for tok in re.findall(rb"/[^\s/\[\]]+|\d+", arr):
+            if tok.isdigit(): code = int(tok)
+            else: out[f"{code:02X}"], code = glyphChar(tok[1:].decode('latin1')), code + 1
+        return {k: v for k, v in out.items() if v}
+    def toRGB(nums, op):
+        v = [float(n) for n in nums.split()][-{b'g': 1, b'rg': 3, b'k': 4}[op]:]
+        v = v * 3 if op == b'g' else [(1 - c) * (1 - v[3]) for c in v[:3]] if op == b'k' and len(v) == 4 else v
+        return tuple(int(max(0, min(1, c)) * 255) for c in v) if len(v) == 3 else (0, 0, 0)
     def fontDictFinder(resBuffer):
         fontcMaps = {}
         resBuffer = resBuffer.split(b"endobj")[0]      # never look past this object
@@ -498,11 +494,22 @@ def PDFToWord(PDFPath):
             if bf:
                 fontInfo[name] = bf.group(1).decode("latin1")
 
+            fc, ws = re.search(rb"/FirstChar\s+(\d+)", fontBuf), re.search(rb"/Widths\s*(\d+\s+\d+\s+R|\[[^\]]*\])", fontBuf)
+            if fc and ws: fontWidths[name] = (int(fc.group(1)), [float(v) for v in re.findall(rb"-?[\d.]+", re.search(rb"\[[^\]]*\]", readObject(int(ws.group(1).split()[0])) if ws.group(1)[-1:] == b'R' else ws.group(1)).group(0))])
+            if (df := re.search(rb"/DescendantFonts\s*\[\s*(\d+)\s+\d+\s+R", fontBuf)) and (wa := re.search(rb"/W\s*\[", cidBuf := readObject(int(df.group(1))))):      #widths of a two-byte font: [first [w w ..]] or [first last w]
+                toks, cw, k = re.findall(rb"\[[^\]]*\]|-?[\d.]+|\]", cidBuf[wa.end():]), {}, 0
+                while k + 1 < len(toks) and toks[k] != b']':
+                    if toks[k + 1][:1] == b'[': cw.update({int(toks[k]) + j: float(v) for j, v in enumerate(re.findall(rb"-?[\d.]+", toks[k + 1]))}); k += 2
+                    else: cw.update({c: float(toks[k + 2]) for c in range(int(toks[k]), int(toks[k + 1]) + 1)}); k += 3
+                fontWidths[name] = (0, [cw.get(i, 1000.0) for i in range(max(cw, default=0) + 1)])
             tu = re.search(rb"/ToUnicode\s+(\d+)\s+\d+\s+R", fontBuf)
             if tu:
                 fontcMaps[name] = parseCmap(readandDecompressStream(int(tu.group(1))))
             elif b"/Identity-H" in fontBuf:
                 undecodable.add(name)
+            elif dm := re.search(rb"/Differences\s*\[([^\]]*)\]", readObject(int(enc.group(1))) if (enc := re.search(rb"/Encoding\s+(\d+)\s+\d+\s+R", fontBuf)) else fontBuf):
+                fontcMaps[name] = diffMap(dm.group(1))
+            elif b"/MacRomanEncoding" in fontBuf: fontcMaps[name] = {f"{c:02X}": bytes([c]).decode('mac_roman') for c in range(128, 256)}
         return fontcMaps
 
     #Page attributes like /Resources and /MediaBox can be written only on a parent /Pages node, so walk up through /Parent until one has the key
@@ -602,79 +609,56 @@ def PDFToWord(PDFPath):
                 fontscMap = fontDictFinder(resBuffer) #This maps each font F1 F2 F5 etc to a dict with each value(but in hexadecimal). but I will do that at the end of the code.
                 decompressedStreamData = expandForms(decompressedStreamData, xobjects, fontscMap, xobjects)
                 
-                cMap = {}
-
-                toUnicodeIndex = resBuffer.find(b"/ToUnicode")
-
-                if toUnicodeIndex != -1:
-                    toUnicodesnippet = resBuffer[toUnicodeIndex : toUnicodeIndex + 100].split()
-                    toUnicodeObjectID = None
-                    for idx, token in enumerate(toUnicodesnippet):
-                        if token == b"/ToUnicode" and idx + 1 < len(toUnicodesnippet):
-                            if toUnicodesnippet[idx + 1].isdigit():
-                                toUnicodeID = int(toUnicodesnippet[idx + 1].decode("latin1"))
-                                cmapBytes = readandDecompressStream(toUnicodeID)
-                                cMap = parseCmap(cmapBytes)
-                                break 
-                else:
-                    encodingIndex = resBuffer.find(b"/Encoding")
-                    if encodingIndex != -1:
-                        encSnippet = resBuffer[encodingIndex: encodingIndex + 200]
-                        diffIndex = encSnippet.find(b"/Differences")
-                        if diffIndex != -1:
-                            diffStart = encSnippet.find(b"[", diffIndex)
-                            diffEnd = encSnippet.find(b"]", diffStart)
-                            if diffStart != -1 and diffEnd != -1:
-                                tokens = encSnippet[diffStart + 1:diffEnd].split()
-                                currCode = 0
-                                for token in tokens:
-                                    tStr = token.decode("latin1", errors="ignore")
-                                    if tStr.isdigit():
-                                        currCode = int(tStr)
-                                    elif tStr.startswith("/"):
-                                        glyphName = tStr[1:]
-                                        srckey = f"{currCode:02X}" #formats as 2 digit hexadecimal key
-                                        if glyphName == "space":
-                                            cMap[srckey] = " "
-                                        elif glyphName == "space":
-                                            cMap[srckey] = " "
-                                        currCode += 1
-
                 #Work out the cm transform active at each BT block so positions are comparable across blocks
-                ctmOps = re.compile(rb'(?<![A-Za-z0-9*])(q|Q)(?![A-Za-z0-9*])|((?:-?[\d.]+\s+){5}-?[\d.]+)\s+cm\b|/([^\s/<>\[\]()]+)\s+Do\b')
+                ctmOps = re.compile(rb'(?<![A-Za-z0-9*])(q|Q)(?![A-Za-z0-9*])|((?:-?[\d.]+\s+){5}-?[\d.]+)\s+cm\b|/([^\s/<>\[\]()]+)\s+Do\b|((?:-?[\d.]+\s+){0,3}-?[\d.]+)\s+(rg|g|k)\b|((?:-?[\d.]+\s+){3}-?[\d.]+)\s+re\b|(-?[\d.]+)\s+(-?[\d.]+)\s+m\s+(-?[\d.]+)\s+(-?[\d.]+)\s+l\b')
                 opsList = list(ctmOps.finditer(decompressedStreamData))
-                ctmStack, ctmNow, opIdx = [], (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), 0
-                textBlocks, placedImages = [], []
+                ctmStack, ctmNow, opIdx, colNow, blockEnd = [], (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), 0, (0, 0, 0), 0
+                textBlocks, placedImages, rules = [], [], []
                 for bm in list(textBlockPattern.finditer(decompressedStreamData)) + [None]:   #None = the ops after the last text block
                     while opIdx < len(opsList) and (bm is None or opsList[opIdx].start() < bm.start()):
                         om = opsList[opIdx]
-                        if om.group(1) == b'q':
-                            ctmStack.append(ctmNow)
+                        if om.group(1) and om.start() < blockEnd: pass          #a lone q or Q inside a text block is just a letter
+                        elif om.group(1) == b'q':
+                            ctmStack.append((ctmNow, colNow))
                         elif om.group(1) == b'Q':
                             if ctmStack:
-                                ctmNow = ctmStack.pop()
+                                ctmNow, colNow = ctmStack.pop()
                         elif om.group(3):
                             placedImages.append((om.group(3).decode('latin1'), ctmNow))
+                        elif om.group(5): colNow = toRGB(om.group(4), om.group(5))
+                        elif om.group(6) or om.group(7):
+                            v = [float(g) for g in (om.group(6).split() if om.group(6) else om.group(7, 8, 9, 10))]
+                            w, h = (v[2], v[3]) if om.group(6) else (v[2] - v[0], v[3] - v[1])
+                            if abs(ctmNow[3] * h) <= 1.5 and abs(ctmNow[0] * w) > 3: rules.append((*sorted((ctmNow[0] * v[0] + ctmNow[4], ctmNow[0] * (v[0] + w) + ctmNow[4])), ctmNow[3] * (v[1] + h / 2) + ctmNow[5]))
                         else:
                             a, b, c, d, e, f = [float(v) for v in om.group(2).split()]
                             a0, b0, c0, d0, e0, f0 = ctmNow
                             ctmNow = (a*a0 + b*c0, a*b0 + b*d0, c*a0 + d*c0, c*b0 + d*d0, e*a0 + f*c0 + e0, e*b0 + f*d0 + f0)
                         opIdx += 1
                     if bm:
-                        textBlocks.append((bm.group(1), ctmNow))
+                        textBlocks.append((bm.group(1), ctmNow, colNow))
+                        blockEnd = bm.end()
                 box = None
                 mediaBox = re.search(rb"/MediaBox\s*\[\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s*\]", findInherited(buffer, b"/MediaBox"))
                 if mediaBox:
                     bx0, by0, bx1, by1 = [float(v) for v in mediaBox.groups()]
                     box = (min(bx0, bx1), min(by0, by1), max(bx0, bx1), max(by0, by1))
-                extractedElements = [{'type': 'pageStart', 'box': box}]
+                links, am = [], re.search(rb'/Annots\s*(\[[^\]]*\]|\d+\s+\d+\s+R)', buffer)
+                for aid in re.findall(rb'(\d+)\s+\d+\s+R', (am.group(1) if am.group(1).startswith(b'[') else readObject(int(am.group(1).split()[0]))) if am else b''):
+                    ab = readObject(int(aid))
+                    ab += readObject(int(ref.group(1))) if (ref := re.search(rb'/A\s+(\d+)\s+\d+\s+R', ab)) else b''
+                    u, r = re.search(rb'/URI\s*\(((?:\\.|[^\\()])*)\)', ab), re.search(rb'/Rect\s*\[([^\]]*)\]', ab)
+                    if u and r and b'/Link' in ab:
+                        q = [float(v) for v in r.group(1).split()]
+                        links.append(((min(q[0], q[2]), min(q[1], q[3]), max(q[0], q[2]), max(q[1], q[3])), pdfUnescape(u.group(1)).decode('latin1')))
+                extractedElements = [{'type': 'pageStart', 'box': box, 'links': links, 'rules': rules}]
                 for name, m in placedImages:
                     data = imageBytes(xobjects[name]) if name in xobjects else None
                     if data and abs(m[0]) > 5 and abs(m[3]) > 5:
                         extractedElements.append({'type': 'image', 'data': data, 'x': m[4], 'y': max(m[5], m[5] + m[3]), 'w': abs(m[0])})
 
-                for block, ctm in textBlocks:
-                    blockElements = [(-1, {'type': 'blockStart', 'ctm': ctm})]
+                for block, ctm, col in textBlocks:
+                    blockElements = [(-1, {'type': 'blockStart', 'ctm': ctm, 'color': col})]
 
                     #Font details               
                     TfPattern = re.compile(rb'/([^\s/<>\[\]()]+)\s+(-?(?:\d+\.?\d*|\.\d+))\s+Tf')
@@ -703,6 +687,8 @@ def PDFToWord(PDFPath):
                     for match in TrPattern.finditer(block):
                         blockElements.append((match.start(), {'type': 'renderingMode', 'mode': float(match.group(1))}))              
 
+                    blockElements += [(m.start(), {'type': 'charSpace', 'value': float(m.group(1))}) for m in re.finditer(rb'(-?[\d.]+)\s+Tc\b', block)]
+                    blockElements += [(m.start(), {'type': 'color', 'rgb': toRGB(m.group(1), m.group(2))}) for m in re.finditer(rb'((?:-?[\d.]+\s+){0,3}-?[\d.]+)\s+(rg|g|k)\b', block)]
                     #Text positions
                     TDPattern = re.compile(rb'(-?(?:\d+\.?\d*|\.\d+))\s+(-?(?:\d+\.?\d*|\.\d+))\s+(Td|TD)')
                     for match in TDPattern.finditer(block):
@@ -763,19 +749,20 @@ def PDFToWord(PDFPath):
                             step = len(next(iter(activeCMap))) if activeCMap else 2   #hex digits per character code
                             if len(cleanHex) % step:
                                 step = 2
-                            decodedChars = ""
+                            decodedChars, fw, width = "", fontWidths.get(currentFont), 0.0
 
                             for i in range(0, len(cleanHex), step):
                                 chunk = cleanHex[i: i + step]
+                                if fw and 0 <= int(chunk, 16) - fw[0] < len(fw[1]): width += fw[1][int(chunk, 16) - fw[0]] / 1000
                                 if chunk in activeCMap:
-                                    decodedChars += activeCMap[chunk]
+                                    decodedChars += SYMS.get((fontInfo.get(currentFont), chunk), activeCMap[chunk])
                                 else:
                                     try:
                                         decodedChars += bytes.fromhex(chunk).decode('cp1252', errors='ignore')   #cp1252 so WinAnsi bullets/quotes/dashes come out right
                                     except:
                                         pass
 
-                            translatedBlockElements.append((position, {'type': 'text', 'content': decodedChars}))
+                            translatedBlockElements.append((position, {'type': 'text', 'content': decodedChars, 'w': width}))
 
                         else:
                             translatedBlockElements.append((position, element))          
@@ -792,6 +779,7 @@ def PDFToWord(PDFPath):
             
             elif subkidsIndex != -1:
                 pageParser(pageID)
+            else: allElements.append({'type': 'pageStart', 'box': None})
 
     if pagesObjectID:
         pageParser(pagesObjectID)
@@ -813,28 +801,90 @@ def PDFToWord(PDFPath):
             family = "Times New Roman"
         elif any(k in fl for k in ("courier", "liberationmono")):
             family = "Courier New"
+        elif fl.startswith("allandnone"):
+            family = "Times New Roman"                                   #obfuscated name, not a real font: the body is Times-like
         else:
             family = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", family)   # DejaVuSans -> DejaVu Sans
         return family, bold, italic
 
     #replay the PDF text operators so every piece of text knows its x, y, size and style
     spans = []
-    x = y = 0.0
+    x = y = adv = tc = 0.0
     scale = 1.0          #font scale coming from the text matrix (many PDFs use "1 Tf" + a scaled Tm)
     leading = 0.0
     size = 11.0
     base = None
     moved = False
     ctm = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
-    pageBox = None
+    pageBox = firstBox = None
+    hidden, rise, color, pageLinks, pageRules, pageOpen = False, 0.0, (0, 0, 0), [], [], []
     currentPageSpans = []
+    BULLETS = {'\u2022', '\u25aa', '\u25cf', '\u25e6', '\u2023', '\uf0b7'}
+    estW = lambda text, size: size * sum(0.28 if c == ' ' else 0.25 if c in "ilj.,;:'!|tfI()[]" else 0.8 if c in 'mwMW' else 0.67 if c.isupper() else 0.55 if c.isdigit() else 0.5 for c in text)
+    def groupLines(group):
+        lines = []
+        for s in sorted(group, key=lambda s: -s['y']):
+            if lines and 'size' in s and 'size' in lines[-1][0] and abs(lines[-1][0]['y'] - s['y']) < (1.0 if min(s['size'], lines[-1][0]['size']) < 0.85 * max(s['size'], lines[-1][0]['size']) else 0.6) * max(s['size'], lines[-1][0]['size']): lines[-1].append(s)   #a smaller span (exponent, index) stays on its line
+            else: lines.append([s])
+        return [sorted(l, key=lambda s: s.get('ex', s['x'])) for l in lines]
+    def cellsOf(line):
+        cells = []
+        for s in line:
+            p = cells[-1][-1] if cells else None
+            if p and 'text' in s and 'text' in p and s['ex'] - p['ex'] - p['wid'] < 2 * s['size']: cells[-1].append(s)
+            else: cells.append([s])
+        return cells
+    def tableRuns(lines):
+        rows = [cellsOf([s for s in l if s.get('text', 'x').strip()]) for l in lines]
+        ok = [len(r) >= 2 and all('text' in c[0] for c in r) and r[0][0]['text'].strip() not in BULLETS and not r[0][0]['symbol'] and all(len(''.join(s['text'] for s in c)) <= 50 for c in r) for r in rows]
+        runs, i = [], 0
+        while i < len(rows):
+            j = i
+            if ok[i]:
+                cols = [c[0]['x'] for c in rows[i]]
+                while j + 1 < len(rows) and ok[j + 1] and lines[j][0]['y'] - lines[j + 1][0]['y'] < 3 * lines[j][0]['size'] and all(any(abs(c[0]['x'] - x) < 8 for x in cols) for c in rows[j + 1]): j += 1
+            if j > i: runs.append((i, j, cols))
+            i = j + 1
+        return runs, rows
 
     def flushPage():
-        if not currentPageSpans:
-            return
-        spans.append({'page': True})
-        currentPageSpans.sort(key=lambda s: (-s['y'], s['x']))
-        spans.extend(currentPageSpans)
+        if not pageOpen: return
+        pageOpen.clear()
+        marker = {'page': True, 'colX': None}
+        spans.append(marker)
+        for a, b, c in pageRules:      #a fraction bar: the text just above and below it becomes one inline "top/bottom"
+            near = [q for q in currentPageSpans if 'text' in q and q['text'].strip() and a - 3 <= q['ex'] + q['wid'] / 2 <= b + 3]
+            top, bot = [q for q in near if 0 < q['y'] - c < 1.3 * q['size']], [q for q in near if 0 < c - q['y'] < 1.3 * q['size']]
+            if top and bot and max(q['y'] for q in top) - min(q['y'] for q in bot) < 1.1 * top[0]['size'] and b - a < 1.6 * max(sum(q['wid'] for q in g) for g in (top, bot)) + 4:
+                n, d = [''.join(q['text'].strip() for q in sorted(g, key=lambda q: q['ex'])) for g in (top, bot)]
+                wrap = lambda t: t if re.fullmatch(r'[\w.]+', t) else f'({t})'
+                currentPageSpans[:] = [q for q in currentPageSpans if q not in top + bot] + [dict(top[0], text=wrap(n) + '/' + wrap(d), x=min(q['ex'] for q in top + bot), ex=min(q['ex'] for q in top + bot), y=c - 0.3 * top[0]['size'], wid=b - a, under=False, moved=True)]
+        for q in [q for q in currentPageSpans if q.get('text') == '()']:      #a tall bracket pair is one string: put ")" after the text it encloses
+            end = q['ex'] + q['wid'] / 2
+            for p in sorted((p for p in currentPageSpans if 'text' in p and p is not q and p['ex'] > q['ex'] and abs(p['y'] - q['y']) < 1.2 * q['size'] and p['size'] >= 0.85 * q['size']), key=lambda p: p['ex']):
+                if p['ex'] - end >= 0.5 * q['size'] or p['text'].lstrip()[:1] in '.;': break
+                end = max(end, p['ex'] + p['wid']) if p['text'].strip() else end
+            currentPageSpans[:] = [p for p in currentPageSpans if p is not q] + [dict(q, text='(', wid=q['wid'] / 2), dict(q, text=')', x=end, ex=end, wid=q['wid'] / 2)]
+        lines = groupLines(currentPageSpans)
+        W = pageBox[2] - pageBox[0] if pageBox else 0
+        xs = [round(s['x'] / 3) * 3 for l in lines for s in l if len(s.get('text', '').strip()) >= 25]
+        near = [x for x in xs if W and abs(x - pageBox[0] - W / 2) < 0.15 * W]
+        c = max(set(near), key=near.count) if near else 0
+        if near.count(c) >= 5 and near.count(c) >= 0.25 * len(xs) and sum(x < c - 0.2 * W for x in xs) >= 5: marker['colX'] = c
+        colX = marker['colX']
+        runs, rows = tableRuns(lines) if colX is None else ([], [])
+        inTable = {k: r for r in runs for k in range(r[0], r[1] + 1)}
+        left, right = [], []
+        for k, l in enumerate(lines):
+            if k in inTable:
+                if k == inTable[k][0]: left.append((l[0]['y'], {'table': (inTable[k][2], rows[inTable[k][0]:inTable[k][1] + 1])}, 1e9))
+            else:
+                a, b = [s for s in l if colX is None or s['x'] < colX - 3], [s for s in l if colX is not None and s['x'] >= colX - 3]
+                if a: left.append((l[0]['y'], a, a[0].get('size', 1e9)))
+                if b: right.append((b[0]['y'], b, b[0].get('size', 1e9)))
+        gaps = sorted((a - b) / z for seq in (left, right) for (a, _, _), (b, _, z) in zip(seq, seq[1:]) if 0.5 < (a - b) / z < 3)
+        marker['pitch'] = gaps[len(gaps) // 2] if gaps else 0
+        for _, item, _ in left + right: spans.extend(item) if isinstance(item, list) else spans.append(item)
         currentPageSpans.clear()
 
     for element in extractedElements:
@@ -844,13 +894,16 @@ def PDFToWord(PDFPath):
         if t == 'pageStart':
             flushPage()
             pageBox = element.get('box')
+            pageOpen.append(1); firstBox = firstBox or pageBox; hidden, rise, color, pageLinks = False, 0.0, (0, 0, 0), element.get('links', [])
+            pageRules = [r for r in element.get('rules', []) if not pageBox or r[1] - r[0] < 0.7 * (pageBox[2] - pageBox[0])]
 
         elif t == 'image':
             currentPageSpans.append(element)
 
         elif t == 'blockStart':
             ctm = element.get('ctm', ctm)
-            x = y = 0.0
+            color = element.get('color', color)
+            x = y = adv = tc = 0.0
             scale = 1.0
             moved = True
 
@@ -860,12 +913,12 @@ def PDFToWord(PDFPath):
 
         elif t == 'matrix':
             scale = element['d'] if element['d'] else 1.0      #keeps its sign so flipped PDFs (Chrome, Cairo) still read top to bottom
-            x, y = element['x'], element['y']
+            x, y, adv = element['x'], element['y'], 0.0
             moved = True
 
         elif t == 'position':
             x += element['dx'] * abs(scale)
-            y += element['dy'] * scale
+            y += element['dy'] * scale; adv = 0.0
             if element['operator'] == 'TD':
                 leading = -element['dy']
             moved = True
@@ -873,15 +926,19 @@ def PDFToWord(PDFPath):
         elif t == 'leading':
             leading = element['value']
 
+        elif t == 'charSpace': tc = element['value']
+        elif t == 'color': color = element['rgb']
+        elif t == 'renderingMode': hidden = element['mode'] == 3
+        elif t == 'rise': rise = element['value']
         elif t == 'newline':
-            y -= leading * scale
+            y -= leading * scale; adv = 0.0
             moved = True
 
         elif t == 'text':
             txt = element.get('content', '')
             txt = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\ud800-\udfff\ufffe\uffff]', '', txt)   #also drops characters Word's XML can't store
 
-            if txt == '':
+            if txt == '' or hidden or re.fullmatch(r'[\s.]{15,}', txt):
                 continue
             if re.fullmatch(r'\*\s*\d+\s*\*', txt.strip()) or (len(txt.strip()) >= 10 and len(set(txt.strip())) <= 5 and '.' not in txt):
                 continue                               #barcode labels (*123*, bTTTTuTTh) are not content
@@ -895,6 +952,9 @@ def PDFToWord(PDFPath):
             absY = ctm[3] * y + ctm[5]
 
             cropMargin = 0
+            wd, ex = element['w'] * effSize + tc * len(txt) * abs(scale * ctm[0]) if element.get('w') else estW(txt, effSize), absX + ctm[0] * adv
+            link = next((u for (x0, y0, x1, y1), u in pageLinks if x0 - 2 <= ex + wd / 2 <= x1 + 2 and y0 - 2 <= absY <= y1 + 2), None)
+            under = len(txt.strip()) > 2 and any(a - 2 <= ex + wd / 2 <= b + 2 and 0 < absY - c <= 0.22 * effSize + 0.5 for a, b, c in pageRules)
 
             if pageBox:
                 left, bottom, right, top = pageBox
@@ -903,30 +963,52 @@ def PDFToWord(PDFPath):
                 if absX < left + cropMargin or absX > right - cropMargin:
                     continue                           #optional side-margin crop (stamps, margin notes), set with cropMargin
                 #a lone 1-3 digit number in the header/footer strip is a page number, so drop it (numbers in the body are kept)
-                if re.match(r'^\d{1,3}$', txt.strip()) and (absY < bottom + 0.08 * (top - bottom) or absY > top - 0.08 * (top - bottom)):
+                if absY < bottom + 0.05 * (top - bottom) or absY > top - 0.05 * (top - bottom) or (re.match(r'^\d{1,3}$', txt.strip()) and (absY < bottom + 0.08 * (top - bottom) or absY > top - 0.08 * (top - bottom))):
                     continue
             
             currentPageSpans.append({'text': txt, 'x': ctm[0] * x + ctm[4], 'y': ctm[3] * y + ctm[5], 'size': effSize, 'font': family,
-                          'bold': bold, 'italic': italic, 'moved': moved,
+                          'bold': bold, 'italic': italic, 'moved': moved, 'ex': ex, 'wid': wd, 'rise': rise * abs(scale) * abs(ctm[3]), 'color': color, 'link': link, 'under': under,
                           'symbol': bool(base and re.search(r'dingbat|symbol', base, re.I))})
             moved = False
+            adv += wd / (ctm[0] or 1)
 
     flushPage()
 
-    BULLETS = {'\u2022', '\u25aa', '\u25cf', '\u25e6', '\u2023', '\uf0b7'}
     leftMargin = min([s['x'] for s in spans if 'text' in s and s['text'].strip()], default=0)
 
+    rightEdge = firstBox[2] - (leftMargin - firstBox[0]) - 0.03 * (firstBox[2] - firstBox[0]) if firstBox else 1e9
     doc = Document()
+    if firstBox: doc.sections[0].page_width, doc.sections[0].page_height = Pt(firstBox[2] - firstBox[0]), Pt(firstBox[3] - firstBox[1])
+    def addRun(para, s, text):
+        run = para.add_run(text)
+        run.font.name, run.font.size, run.bold, run.italic = 'Arial' if pageNum == 1 and s['font'] == 'Times New Roman' else s['font'], Pt(s['size']), s['bold'] or None, s['italic'] or None
+        if abs(s['rise']) > 0.2 * s['size']: run.font.superscript, run.font.subscript = s['rise'] > 0, s['rise'] < 0
+        if s['color'] != (0, 0, 0) and min(s['color']) < 240: run.font.color.rgb = RGBColor(*s['color'])
+        run.font.underline = True if s['under'] or s['link'] else None
+        if s['link']:
+            hl = OxmlElement('w:hyperlink'); hl.set(qn('r:id'), para.part.relate_to(s['link'], RT.HYPERLINK, is_external=True)); run._r.addprevious(hl); hl.append(run._r)
+    pitch, colX = 0, None
     para = None
-    lastY = lastSize = None
-    seenPage = False
+    lastY = lastSize = lastEnd = None
+    seenPage, pageNum = False, 0
 
     for s in spans:
         if s.get('page'):
             if seenPage:
                 doc.add_page_break()
-            seenPage = True
+            seenPage, pageNum = True, pageNum + 1
             para = None
+            pitch, colX = s.get('pitch', 0), s.get('colX')
+            continue
+
+        if 'table' in s:
+            cols, rows = s['table']; tbl = doc.add_table(rows=len(rows), cols=len(cols)); tbl.style = 'Table Grid'; para = None
+            for r, row in enumerate(rows):
+                for cell in row:
+                    p = tbl.cell(r, min(range(len(cols)), key=lambda k: abs(cols[k] - cell[0]['x']))).paragraphs[0]
+                    for c in cell:
+                        if p.text and c['moved'] and not p.text.endswith(' ') and not c['text'].startswith(' '): p.add_run(' ')
+                        addRun(p, c, c['text'])
             continue
 
         if s.get('type') == 'image':
@@ -948,43 +1030,42 @@ def PDFToWord(PDFPath):
 
         #Whitespace-only pieces are just gaps: add one space unless the text already ends with one
         if not stripped:
-            if para is not None and para.runs and not para.runs[-1].text.endswith(' '):
+            if para is not None and para.text and not para.text.endswith(' '):
                 para.add_run(' ')
             continue
 
         newPara = False
-        if para is None:
+        script = para is not None and s['size'] < 0.85 * lastSize and -0.3 * lastSize < s['ex'] - (lastEnd or 0) < 0.6 * lastSize and 0.15 * lastSize < abs(s['y'] - lastY) < 1.1 * lastSize      #exponent or index of the previous piece
+        if script: s = dict(s, size=lastSize, rise=s['y'] - lastY)
+        elif para is None:
             newPara = True
         else:
             gap = abs(s['y'] - lastY)
             if gap < 0.5 * s['size']:
                 pass                                   #same line
-            elif abs(s['size'] - lastSize) > 1 or gap > 1.7 * s['size']:
+            elif abs(s['size'] - lastSize) > 1 or gap > (min(1.7, 1.3 * pitch) * s['size'] if pitch > 0.8 else 1.7 * s['size']):
                 newPara = True                         #heading/size change or a paragraph-sized gap
 
         if newPara:
             para = doc.add_paragraph()
-            if s['x'] - leftMargin > 80:               #starts far from the left margin: centered text
-                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        elif s['moved'] and para.runs and not para.runs[-1].text.endswith(' ') and not text.startswith(' '):
+            if s['x'] - (colX if colX and s['x'] >= colX - 3 else leftMargin) > 80:               #starts far from the left margin: right or centered text
+                para.alignment = WD_ALIGN_PARAGRAPH.RIGHT if s['x'] + 0.5 * len(text) * s['size'] > rightEdge else WD_ALIGN_PARAGRAPH.CENTER
+        elif s['moved'] and not script and para.text and not para.text.endswith(' ') and not text.startswith(' ') and (abs(s['y'] - lastY) > 0.5 * s['size'] or s['ex'] - lastEnd > 0.2 * s['size']):
             para.add_run(' ')                          #wrapped line or a gap on the same line
 
-        run = para.add_run(text)
-        run.font.name = s['font']
-        run.font.size = Pt(s['size'])
-        if s['bold']:
-            run.bold = True
-        if s['italic']:
-            run.italic = True
+        addRun(para, s, text)
 
-        lastY, lastSize = s['y'], s['size']
+        lastY, lastSize = (lastY, lastSize) if script else (s['y'], s['size'])
+        lastEnd = s['ex'] + s['wid']
 
-    outputPath = "Outputs/converted_document.docx"
+
+    PDFName = os.path.basename(PDFPath).split(".")[0]
+    
+    outputPath = f"Outputs/{PDFName}.docx"
 
     os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
     doc.save(outputPath)
     PDF.close()
     print("done")
-    return outputPath
 
 PDFToWord("Inputs/file-example_PDF_500_kB.pdf")

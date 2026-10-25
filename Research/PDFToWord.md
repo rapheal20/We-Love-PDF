@@ -62,4 +62,4 @@ field 1: 0 = free, 1 = in use, 2 = compressed
 field 2: byte offset or object number 
 field 3: generation uumber 
 
-So I remake the func with both cases
+So I remake the func with both cases. The function is complete but the output is sometimes disappointing esp with unique kind of files like the pastpaper I added. So i am taking claudes help to improve it more. 
