@@ -647,7 +647,7 @@ def parse_pdf_to_spans(PDFPath):
                 for name, m in placedImages:
                     data = imageBytes(xobjects[name]) if name in xobjects else None
                     if data and abs(m[0]) > 5 and abs(m[3]) > 5:
-                        extractedElements.append({'type': 'image', 'data': data, 'x': m[4], 'y': max(m[5], m[5] + m[3]), 'w': abs(m[0])})
+                        extractedElements.append({'type': 'image', 'data': data, 'x': m[4], 'y': max(m[5], m[5] + m[3]), 'w': abs(m[0]), 'h':abs(m[3])})
 
                 for block, ctm, col in textBlocks:
                     blockElements = [(-1, {'type': 'blockStart', 'ctm': ctm, 'color': col})]
@@ -662,6 +662,8 @@ def parse_pdf_to_spans(PDFPath):
                     TmPattern = re.compile(rb'([-\d\.eE+-]+)\s+([-\d\.eE+-]+)\s+([-\d\.eE+-]+)\s+([-\d\.eE+-]+)\s+([-\d\.eE+-]+)\s+([-\d\.eE+-]+)\s+Tm', re.DOTALL)
                     for match in TmPattern.finditer(block):
                         a, b, c, d, e, f = match.groups()
+
+                        # print(e, f)
                         blockElements.append((match.start(), {'type': 'matrix', 'a': float(a), 'b': float(b), 'c': float(c), 'd': float(d), 'x': float(e), 'y': float(f)}))
 
                     #Text rise (Ts)
