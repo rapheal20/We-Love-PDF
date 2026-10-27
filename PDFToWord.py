@@ -16,28 +16,6 @@ from PIL import Image
 def PDFToWord(PDFPath):
     extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
 
-    #Turns a PDF BaseFont like "ABCDEF+DejaVuSans-Bold" into (Word font name, bold, italic)
-    def fontStyle(base):
-        if not base:
-            return "Calibri", False, False
-        base = re.sub(r"^[A-Z]{6}\+", "", base)
-        low = base.lower()
-        bold = any(k in low for k in ("bold", "black", "heavy"))
-        italic = "italic" in low or "oblique" in low
-        family = re.split(r"[-,]", base)[0]
-        fl = family.lower()
-        if any(k in fl for k in ("helvetica", "arial", "liberationsans")):
-            family = "Arial"
-        elif any(k in fl for k in ("times", "liberationserif")):
-            family = "Times New Roman"
-        elif any(k in fl for k in ("courier", "liberationmono")):
-            family = "Courier New"
-        elif fl.startswith("allandnone"):
-            family = "Times New Roman"                                   #obfuscated name, not a real font: the body is Times-like
-        else:
-            family = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", family)   # DejaVuSans -> DejaVu Sans
-        return family, bold, italic
-
     #replay the PDF text operators so every piece of text knows its x, y, size and style
     spans = []
     x = y = adv = tc = 0.0
@@ -292,7 +270,7 @@ def PDFToWord(PDFPath):
 
     PDFName = os.path.basename(PDFPath).split(".")[0]
     
-    outputPath = f"Outputs/{PDFName}1.docx"
+    outputPath = f"Outputs/{PDFName}.docx"
 
     os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
     doc.save(outputPath)
