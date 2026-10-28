@@ -3,15 +3,12 @@
 
 import os 
 import re 
-import zlib
-import base64
 import io
 from CommonFunctionsForDocs import *
 from helperfunctions import *
 from docx import Document 
 from docx.shared import Pt, RGBColor; import unicodedata; from docx.opc.constants import RELATIONSHIP_TYPE as RT; from docx.oxml import OxmlElement; from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from PIL import Image
 
 def PDFToWord(PDFPath):
     extractedElements, firstBox = parse_pdf_to_spans(PDFPath)

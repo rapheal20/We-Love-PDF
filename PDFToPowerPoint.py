@@ -1,35 +1,19 @@
-#This function converts a PDF file to a .docs 
-#Coded by Anael
+#This function converts a PDF file to a .pptx
+#Coded by Rapheal
 
 
 import os 
-import base64
 import io
 from helperfunctions import *
-import unicodedata
 from pptx import Presentation
-from pptx.util import Pt, Inches
+from pptx.util import Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
 import math
-
 from CommonFunctionsForDocs import *
 
-# from docx import Document 
-# from docx.shared import Pt, RGBColor; import unicodedata; from docx.opc.constants import RELATIONSHIP_TYPE as RT; from docx.oxml import OxmlElement; from docx.oxml.ns import qn
-# from docx.enum.text import WD_ALIGN_PARAGRAPH
-from PIL import Image
-
-
-'''
-Using the PDFToWord Function to do the conversion
-'''
-
 pdf1 = "Inputs\\emaar1.pdf"
-# pdf1 = "Inputs\\Dickinson_Sample_Slides.pdf"
 
 def PDFToPowerPoint(PDFPath):
-
     extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
 
     def addPPTXRun(para,text, base, size, color):
@@ -89,8 +73,10 @@ def PDFToPowerPoint(PDFPath):
                     prs.slide_width = Pt(pdf_W)
                     prs.slide_height = Pt(pdf_H)
                     first_page = False
+                    # page size defined only with the 1st page
                     #no need for scaleing as size are set using page size
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
+                #adds a blank slide, layout 6 is the empty slide
                 tf = None
                 continue
 
@@ -99,21 +85,10 @@ def PDFToPowerPoint(PDFPath):
 
             if t == 'image':
                 try:
-                    # x_pos = Pt(min(max(0, span.get('x', 0) * scale_X), slideWidth_PTS - 50))
-                    # y_pos = Pt(min(max(0, slideHeight_PTS - span.get('y', 0) * scale_Y), slideHeight_PTS - 100))
-
-                    # # img_X = min(max(0, span.get('x', 0) * scale_X), slideWidth_PTS - 100)
-                    # # img_X = span.get('x', 0) * scale_X
-                    # # img_Y = min(max(0, slideHeight_PTS - span.get('y', 0) * scale_Y), slideHeight_PTS - 100)
-                    # # img_Y = slideHeight_PTS - span.get('y', 0) * scale_Y
-                    # # subtracting from height beacuse PDF has 0 as bottom left corner and Powerpoint has it at top left corner
-                    # img_W = min(span.get('w', 100)*scale_X , 400)
-                    # # img_W = span.get('w', 100)*scale_X
-
                     pic = slide.shapes.add_picture(
                         io.BytesIO(span['data']),
                         left=Pt(span['x'] - x0),
-                        top=Pt(y1 - span['y']),
+                        top=Pt(y1 - span['y']), #to account for the difference in 0 in y axis
                         width=Pt(span['w']),
                         height=Pt(span['h'] if span.get('h') else None)
                     )
@@ -128,11 +103,17 @@ def PDFToPowerPoint(PDFPath):
 
 
             if t == 'blockStart':
+                # this is where a new block starts
+                # its transformations are stored in ctm
+                # tm is reset ie position is reset
+                # tf is None, to make a new textbox for new text
                 ctm, tm, tf = tuple(span['ctm']), IDENT, None
                 color = span['color']
             elif t == 'font':
                 base, fsize = span['base'], span['size']
             elif t == 'matrix':
+                # tm stores the new positions of the text
+                # tf is None, to make a new textbox
                 tm = (span['a'], span['b'], span['c'], span['d'], span['x'], span['y'])
                 tf = None
             elif t in ('position', 'newline'):
@@ -144,6 +125,7 @@ def PDFToPowerPoint(PDFPath):
                     dx, dy = 0 , -leading
 
                 a, b, c, d, e, f = tm
+                # account for any scaling or rotation
                 tm = (a, b, c, d, e + dx * a + dy * c, f + dx * b + dy * d)
                 tf = None
             elif t == 'leading':
@@ -156,52 +138,35 @@ def PDFToPowerPoint(PDFPath):
             elif t == 'text':
                 text = span.get('content', '')
                 if text == '' or mode in (3, 7):
+                    # mode 3 and 7 are empty layes so are skipped
                     continue
 
                 x = tm[4] * ctm[0] + tm[5] * ctm[2] + ctm[4]
                 y = tm[4] * ctm[1] + tm[5] * ctm[3] + ctm[5]
+                # converts the text position into the page coordintes by combining text matrix with blocks transformation
                 mc = tm[2] * ctm[0] + tm[3] * ctm[2]
                 md = tm[2] * ctm[1] + tm[3] * ctm[3]
                 size = abs(fsize) * math.hypot(mc, md)
+                #scales the font size based on vertical scale
 
                 if tf is None:
                     txBox = slide.shapes.add_textbox(
                         Pt(x - x0), Pt(y1 - y - size * 0.9),
                         Pt(max(size, pdf_W - (x - x0))), Pt(size * 1.2))
                     tf = txBox.text_frame
-                    tf.word_wrap = False
+                    tf.word_wrap = True
                     tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
                     para = tf.paragraphs[0]
 
                 addPPTXRun(para, text, base, size, color)
 
-            # text = span.get('content', '').strip()
-            # if not text:
-            #     #skips any blank values
-            #     continue
-
-            # if tf is None:
-            #     x_pos = Pt(min(max(0, span.get('x', 0) * scale_X), slideWidth_PTS - 50))
-            #     y_pos = Pt(min(max(0, slideHeight_PTS - span.get('y', 0) * scale_Y), slideHeight_PTS - 100))
-                
-            #     txBox = slide.shapes.add_textbox((x_pos), (y_pos), Inches(8.4), Inches(5.8))
-            #     tf = txBox.text_frame
-            #     tf.word_wrap = True
-            #     para = tf.paragraphs[0]
-            # else:
-            #     para = tf.add_paragraph()
-
-            # addPPTXRun(para, span, text)
-
-
         PDFName = os.path.basename(PDFPath).split(".")[0]
-        
         outputPath = f"Outputs/{PDFName}.pptx"
-
-        os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
         prs.save(outputPath)
         print("done")
 
     PPTXBuilder(extractedElements, firstBox, PDFPath)
+
+
 
 PDFToPowerPoint(pdf1)
