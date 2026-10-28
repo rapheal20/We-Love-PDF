@@ -229,6 +229,92 @@ def RootObjectIDFunc(PDFPath):
     return None
 
 
+#Finds where one object ends (its endobj) in the bytes read so far, or None if more bytes are needed.
+#Streams are skipped using /Length so binary data that happens to contain "endobj" can't cut the object short
+def cutObject(data):
+    endObj = data.find(b"endobj")
+    streamStart = re.search(rb"[>\s]stream(?:\r\n|\n|\r)", data)
+    if streamStart and (endObj == -1 or streamStart.start() < endObj):
+        lengthMatch = re.search(rb"/Length\s+(\d+)(?!\d|\s+\d+\s+R)", data[:streamStart.start()])
+        if lengthMatch:
+            skip = streamStart.end() + int(lengthMatch.group(1))
+            if len(data) < skip + 12:
+                return None
+            if data[skip:skip + 12].lstrip().startswith(b"endstream"):
+                endStream = skip
+            else:
+                endStream = data.find(b"endstream", streamStart.end())
+        else:
+            endStream = data.find(b"endstream", streamStart.end())
+        if endStream == -1:
+            return None
+        endObj = data.find(b"endobj", endStream)
+    return None if endObj == -1 else data[:endObj]
+
+#Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
+def GetObjectBytes(PDF, XrefTable, objectID, objStmCache):
+    entry = XrefTable.get(objectID)
+
+    if not entry or entry.get('type') == "f":
+        return b""
+
+    if entry.get('type') == "compressedInsideStream":
+        #for these, 'offset' is NOT a file position. It is the ID of the object stream that holds it
+        body = ReadObjectStream(PDF, XrefTable, entry['offset'], objStmCache).get(objectID, b"")
+        return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
+
+    PDF.seek(entry['offset'])
+    data = b""
+    while True:
+        more = PDF.read(65536)
+        if not more:
+            return data.split(b"endobj")[0]      #end of file: use what there is
+        data += more
+        cut = cutObject(data)
+        if cut is not None:
+            return cut
+
+
+    
+#Opens one object stream and returns {objectID: bytes of that object}
+def ReadObjectStream(PDF, XrefTable, streamID, objStmCache):
+    if streamID in objStmCache:
+        return objStmCache[streamID]
+
+    streamObject = GetObjectBytes(PDF, XrefTable, streamID, objStmCache)
+
+    countMatch = re.search(rb'/N\s+(\d+)', streamObject)         #how many objects are inside
+    firstMatch = re.search(rb'/First\s+(\d+)', streamObject)     #where the objects start after the id/offset list
+    if not countMatch or not firstMatch:
+        return {}
+    count = int(countMatch.group(1))
+    first = int(firstMatch.group(1))
+
+    start = streamObject.find(b"stream") + 6
+    if streamObject[start:start + 2] == b"\r\n":
+        start += 2
+    elif streamObject[start:start + 1] == b"\n":
+        start += 1
+
+    end = streamObject.rfind(b"endstream")
+    decompressed = zlib.decompressobj().decompress(streamObject[start:end])
+
+    #the start of the stream is a list like: id1 offset1 id2 offset2 ...
+    numbers = decompressed[:first].split()
+    result = {}
+    for i in range(count):
+        objectID = int(numbers[2 * i])
+        offset = int(numbers[2 * i + 1])
+        if i + 1 < count:
+            nextOffset = int(numbers[2 * i + 3])
+        else:
+            nextOffset = len(decompressed) - first
+        result[objectID] = decompressed[first + offset: first + nextOffset].strip()
+
+    objStmCache[streamID] = result
+    return result
+
+
 
 '''BY RAPHEAL'''
 
