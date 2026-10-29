@@ -368,11 +368,13 @@ def Make_Xref(objectFindString, FinalPDFStr):
 #remaps the ids of PDF with the new ids
 #returns the new pdf string, can be directly used
 
+#PDF_Data is a list
 #here PDF_Data is the list of all objects in the PDF
 def PDF_ID_Remap(PDF_Data, PDFString, OriginalID):
     #Making a mapping dict what has originalID as key and NewID as value
     mapping_Dict = {}
     for obj in PDF_Data:
+        # print(obj["NewID"])
         mapping_Dict[str(obj[OriginalID])] = str(obj["NewID"])
  
     def Obj_Declaration(match):
