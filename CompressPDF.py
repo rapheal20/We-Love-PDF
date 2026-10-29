@@ -1,8 +1,9 @@
 import re
 import zlib
+import os
 from io import BytesIO
 from PIL import Image
-from helperfunctions import Make_Header, Make_Xref, PDF_ID_Remap
+from helperfunctions import *
 
 
 '''
@@ -31,25 +32,37 @@ def PDF_Compress(pdf_file):
         PDF_Data = PDF_Data_RB.decode("latin1")
         # converts it into byte like format
 
-        '''CONSTANTS'''
-        global objectFindString, objectEndString, refFindString, trailerFindString
-        #for finding objects
-        objectFindString = r"\b(\d+)\s+(\d+)\s+obj\b" 
-        objectEndString = r"\bendobj"
-        # for finding refernces
-        refFindString = r"\s*(\d+)\s+(\d+)\s+R" 
-        #for finding trailer
-        trailerFindString = r"/\s*Root\s+(\d+)\s+(\d+)\s+R" #\s* represents no or more spaces
-        #for finding catalog
-        catalogFindString = r"\s*/\s*Type\s*/\s*Catalog\s*"
-        #for finding images objects
-        imgFindStr = r"\s*/\s*Subtype\s*/\s*Image\s*"
-        '''END OF CONSTANTS'''
-        
+        # takes the string of the pdf
+        # extracts all the objects from it, along with its references
+        # returns the dict
+        def PDF_Dict_Maker(PDF_Data):
+            Objects_List = {}
+            Objects = re.finditer(objectFindString, PDF_Data, flags=re.IGNORECASE)
+            for object in Objects:
+                startOffset = object.start()
+                ObjectEnd = re.search(objectEndString, PDF_Data[startOffset:], flags=re.IGNORECASE)
+                endOffset = ObjectEnd.end() + startOffset
+                ObjectData = (PDF_Data[startOffset:endOffset])
+                ObjectID = object.group(1)
+
+                referenceList = []
+                references = re.finditer(refFindString, ObjectData, flags=re.IGNORECASE)
+                if references:
+                    for ref in references:
+                        referenceList.append(ref.group(1))
+
+
+                Objects_List[ObjectID] = {
+                    "ObjectID" : ObjectID,
+                    "Body" : str(ObjectData),
+                    "References" : referenceList,
+                }
+
+            return Objects_List
+
         Objects_Dict = PDF_Dict_Maker(PDF_Data)
 
         TrailerObj = re.search(trailerFindString, PDF_Data, flags=re.IGNORECASE)
-
         RootID = TrailerObj.group(1)
 
         '''Breath For Search'''
@@ -237,39 +250,12 @@ def PDF_Compress(pdf_file):
         CombinePDFStr += "\n\n" + trailerObj #concatinates the new trailer
 
         encodedPDF = CombinePDFStr.encode("latin1") # encodes the pdf string back to latin1
-        with open("Outputs\\WeLovePDF_Compress.pdf" , "wb") as file:
+
+        PDFName = os.path.basename(pdf_file).split(".")[0]
+        with open(f"Outputs\\{PDFName}-Compressed.pdf" , "wb") as file:
             file.write(encodedPDF)
     except:
         print("Error")
-
-
-# takes the string of the pdf
-# extracts all the objects from it, along with its references
-# returns the dict
-def PDF_Dict_Maker(PDF_Data):
-        Objects_List = {}
-        Objects = re.finditer(objectFindString, PDF_Data, flags=re.IGNORECASE)
-        for object in Objects:
-            startOffset = object.start()
-            ObjectEnd = re.search(objectEndString, PDF_Data[startOffset:], flags=re.IGNORECASE)
-            endOffset = ObjectEnd.end() + startOffset
-            ObjectData = (PDF_Data[startOffset:endOffset])
-            ObjectID = object.group(1)
-
-            referenceList = []
-            references = re.finditer(refFindString, ObjectData, flags=re.IGNORECASE)
-            if references:
-                for ref in references:
-                    referenceList.append(ref.group(1))
-
-
-            Objects_List[ObjectID] = {
-                "ObjectID" : ObjectID,
-                "Body" : str(ObjectData),
-                "References" : referenceList,
-            }
-
-        return Objects_List
 
 
 PDF_Compress(pdf3)

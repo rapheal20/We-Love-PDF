@@ -6,448 +6,396 @@ import re
 import zlib
 
 def SplitPDF(PDFPath, splitPage):
-    PDF = open(PDFPath, "rb")
+    try:
+        PDF = open(PDFPath, "rb")
 
-    PDFSize = os.path.getsize(PDFPath) - 1
-    PDFVersion = PDFVersionFunc(PDFPath)
+        PDFSize = os.path.getsize(PDFPath) - 1
+        PDFVersion = PDFVersionFunc(PDFPath)
 
-    xrefResult = XrefTableFunc(PDFPath)
+        xrefResult = XrefTableFunc(PDFPath)
 
-    if isinstance(xrefResult, tuple):
-        AllXrefTable, XrefTableAddress = xrefResult
-    else:
-        AllXrefTable = xrefResult
+        if isinstance(xrefResult, tuple):
+            AllXrefTable, XrefTableAddress = xrefResult
+        else:
+            AllXrefTable = xrefResult
 
-        firstEntry = next(iter(AllXrefTable.values())) if AllXrefTable else 0
-        firstOffset = firstEntry.get('offset', 0) if isinstance(firstEntry, dict) else firstEntry
-        XrefTableAddress = [firstOffset] if AllXrefTable else [0]
+            firstEntry = next(iter(AllXrefTable.values())) if AllXrefTable else 0
+            firstOffset = firstEntry.get('offset', 0) if isinstance(firstEntry, dict) else firstEntry
+            XrefTableAddress = [firstOffset] if AllXrefTable else [0]
 
-    if isinstance(XrefTableAddress, list) and XrefTableAddress:
-        XrefTableAddress = XrefTableAddress[-1]
+        if isinstance(XrefTableAddress, list) and XrefTableAddress:
+            XrefTableAddress = XrefTableAddress[-1]
 
-    XrefTable = AllXrefTable
+        XrefTable = AllXrefTable
 
-    PDF.seek(0)
-    if re.search(rb'/Encrypt\s+\d+\s+\d+\s+R|/Encrypt\s*<<', PDF.read()):
-        raise ValueError("This PDF is encrypted. Remove the encryption first.")
+        PDF.seek(0)
+        if re.search(rb'/Encrypt\s+\d+\s+\d+\s+R|/Encrypt\s*<<', PDF.read()):
+            raise ValueError("This PDF is encrypted. Remove the encryption first.")
 
-    validOffsets = []
-    for entry in XrefTable.values():
-        if entry.get('type') == "n": #only objects that really sit in the file
-            validOffsets.append(entry['offset'])
+        validOffsets = []
+        for entry in XrefTable.values():
+            if entry.get('type') == "n": #only objects that really sit in the file
+                validOffsets.append(entry['offset'])
 
-    sortedOffsets = sorted(set(validOffsets))
-    sortedOffsets.append(XrefTableAddress)
+        sortedOffsets = sorted(set(validOffsets))
+        sortedOffsets.append(XrefTableAddress)
 
-    objStmCache = {} #so every object stream is only decompressed once
+        objStmCache = {} #so every object stream is only decompressed once
 
-    #Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
-    def GetObjectBytes(objectID):
-        entry = XrefTable.get(objectID)
-
-        if not entry or entry.get('type') == "f":
-            return b""
-
-        if entry.get('type') == "compressedInsideStream":
-            #for these, 'offset' is NOT a file position. It is the ID of the object stream that holds it
-            body = ReadObjectStream(entry['offset']).get(objectID, b"")
-            return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
-
-        startOffset = entry['offset']
-        try:
-            currentIndex = sortedOffsets.index(startOffset)
-            length = sortedOffsets[currentIndex + 1] - startOffset
-        except:
-            length = 2048
-
-        PDF.seek(startOffset)
-        return PDF.read(length)
-
-    #Opens one object stream and returns {objectID: bytes of that object}
-    def ReadObjectStream(streamID):
-        if streamID in objStmCache:
-            return objStmCache[streamID]
-
-        streamObject = GetObjectBytes(streamID)
-
-        count = int(re.search(rb'/N\s+(\d+)', streamObject).group(1))     #how many objects are inside
-        first = int(re.search(rb'/First\s+(\d+)', streamObject).group(1))  #where the objects start after the id/offset list
-
-        start = streamObject.find(b"stream") + 6
-        if streamObject[start:start + 2] == b"\r\n":
-            start += 2
-        elif streamObject[start:start + 1] == b"\n":
-            start += 1
-
-        end = streamObject.find(b"endstream", start)
-        decompressed = zlib.decompress(streamObject[start:end])
-
-        #the start of the stream is a list like: id1 offset1 id2 offset2 ...
-        numbers = decompressed[:first].split()
-        result = {}
-        for i in range(count):
-            objectID = int(numbers[2 * i])
-            offset = int(numbers[2 * i + 1])
-            if i + 1 < count:
-                nextOffset = int(numbers[2 * i + 3])
-            else:
-                nextOffset = len(decompressed) - first
-            result[objectID] = decompressed[first + offset: first + nextOffset].strip()
-
-        objStmCache[streamID] = result
-        return result
-
-    RootObjectID = RootObjectIDFunc(PDFPath)
-    catalogObjectID = RootObjectID #Root and catalog are the same object
-
-    buffer = GetObjectBytes(catalogObjectID)
-
-    pagesRefMatch = re.search(rb'/Pages\s+(\d+)\s+(\d+)\s+R', buffer)
-    numberOfPages = 0
-
-    if pagesRefMatch:
-        pagesObjectID = int(pagesRefMatch.group(1))
-        pagesBuffer = GetObjectBytes(pagesObjectID)
-        countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
-
-        if countMatch:
-            numberOfPages = int(countMatch.group(1))
-
-    #print("Number of pages:", numberOfPages) #temporary test line
-    
-        countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
+        RootObjectID = RootObjectIDFunc(PDFPath)
+        catalogObjectID = RootObjectID #Root and catalog are the same object
         
-        if countMatch:
-            numberOfPages = int(countMatch.group(1))
+        buffer = GetObjectBytes(PDF, XrefTable, catalogObjectID, objStmCache)
 
-    pagesData = []
+        pagesRefMatch = re.search(rb'/Pages\s+(\d+)\s+(\d+)\s+R', buffer)
+        numberOfPages = 0
 
-    #This is the stuff I need to store for each page.
-    '''
-    pageEntry = {"pageIndex": 0, #index
-                "objectID": (0, 0), #[ID, Generation]
-                "inheritedAttributes": {"MediaBox": [0, 0, 0, 0], "Rotate": 0 }, #Just extract
-                "directReferences": {"contents": [0], "resources": 6}, #Objet ID for /Contents streams, Object ID for /Resources 
-                "dependencyIDs": [0, 0, 0, 0] #list of all child Object IDs
-                }
-    '''
+        if pagesRefMatch:
+            pagesObjectID = int(pagesRefMatch.group(1))
+            pagesBuffer = GetObjectBytes(PDF, XrefTable, pagesObjectID, objStmCache)
+            countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
 
-    #This is the last part of the code but written as a separate function for ease
-    def ExportPDFPart(partPages, outputFilename):
-        if not partPages:
-            return
+            if countMatch:
+                numberOfPages = int(countMatch.group(1))
 
-        #These two are the starting 2 objects. After that the objects will be named from 3
-        catalogID = 1
-        pagesID = 2
-        nextID = 3
+        #print("Number of pages:", numberOfPages) #temporary test line
+        
+            countMatch = re.search(rb'/Count\s+(\d+)', pagesBuffer)
+            
+            if countMatch:
+                numberOfPages = int(countMatch.group(1))
 
-        #Track mapped IDs: maps original page object IDs to new renumbered IDs
-        idMap = {}
-        pageRefs = []
-        allDependencies = set()
-        targetPageIDS = []
+        pagesData = []
 
-        for page in partPages:
-            pageID = page["objectID"][0]
-            targetPageIDS.append(pageID)
-            idMap[pageID] = nextID
-            pageRefs.append(f"{nextID} 0 R")
-            allDependencies.update(page["dependencyIDs"])
-            nextID += 1
+        #This is the stuff I need to store for each page.
+        '''
+        pageEntry = {"pageIndex": 0, #index
+                    "objectID": (0, 0), #[ID, Generation]
+                    "inheritedAttributes": {"MediaBox": [0, 0, 0, 0], "Rotate": 0 }, #Just extract
+                    "directReferences": {"contents": [0], "resources": 6}, #Objet ID for /Contents streams, Object ID for /Resources 
+                    "dependencyIDs": [0, 0, 0, 0] #list of all child Object IDs
+                    }
+        '''
 
-        dependencyIDsToMap = []
+        #This is the last part of the code but written as a separate function for ease
+        def ExportPDFPart(partPages, outputFilename):
+            if not partPages:
+                return
 
-        #This code is excluding the pages themselves from the dependency list
-        for dependencyID in allDependencies:
-            if dependencyID not in targetPageIDS:
-                dependencyIDsToMap.append(dependencyID)
+            #These two are the starting 2 objects. After that the objects will be named from 3
+            catalogID = 1
+            pagesID = 2
+            nextID = 3
 
-        for pageID in dependencyIDsToMap:
-            if pageID not in idMap:
+            #Track mapped IDs: maps original page object IDs to new renumbered IDs
+            idMap = {}
+            pageRefs = []
+            allDependencies = set()
+            targetPageIDS = []
+
+            for page in partPages:
+                pageID = page["objectID"][0]
+                targetPageIDS.append(pageID)
                 idMap[pageID] = nextID
+                pageRefs.append(f"{nextID} 0 R")
+                allDependencies.update(page["dependencyIDs"])
                 nextID += 1
 
-        newXrefTable = {}
+            dependencyIDsToMap = []
 
-        #Join all kids with a space
-        kidsArrayStr = " ".join(pageRefs)
-        pageCount = len(partPages)
+            #This code is excluding the pages themselves from the dependency list
+            for dependencyID in allDependencies:
+                if dependencyID not in targetPageIDS:
+                    dependencyIDsToMap.append(dependencyID)
 
-        #Generating /Catalog Object
-        catalogBytes = (
-            f"{catalogID} 0 obj\n" 
-            f"<<\n" 
-            f"  /Type /Catalog\n"
-            f"  /Pages {pagesID} 0 R\n"
-            f">>\n"
-            f"endobj\n"
-            ).encode("latin1")
+            for pageID in dependencyIDsToMap:
+                if pageID not in idMap:
+                    idMap[pageID] = nextID
+                    nextID += 1
 
-        #Generating the /Pages Root object 
-        pagesBytes = (
-            f"{pagesID} 0 obj\n"
-            f"<<\n"
-            f"  /Type /Pages\n"
-            f"  /Count {pageCount}\n"
-            f"  /Kids [ {kidsArrayStr} ]\n"
-            f">>\n"
-            f"endobj\n"
-            ).encode("latin1")
+            newXrefTable = {}
 
-        #This function updates the objectIDs inside object headers and refs
-        def replaceRefs(match):
-            refID = int(match.group(1))
-            genNum = match.group(2).decode('latin1')
-            
-            if refID in idMap:
-                return f"{idMap[refID]} {genNum} R".encode('latin1')
-            return match.group(0)
+            #Join all kids with a space
+            kidsArrayStr = " ".join(pageRefs)
+            pageCount = len(partPages)
 
-        with open(outputFilename, "wb") as outputPDF:
-            #standard header
-            header = f"%PDF-{PDFVersion}\n%\xe2\xe3\xcf\xd3\n".encode('utf-8')
-            outputPDF.write(header)
-
-            #writing /catalog which is object 1
-            newXrefTable[1] = outputPDF.tell()
-            outputPDF.write(catalogBytes)
-
-            #writing /pages root which is object 2
-            newXrefTable[2] = outputPDF.tell()
-            outputPDF.write(pagesBytes)
-
-            #These are patternf for object extraction and ref replacements
-            objectRefPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
-            parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
-
-            #processing all objects now 
-            allOldIDsToWrite = targetPageIDS + dependencyIDsToMap
-
-            for oldID in allOldIDsToWrite:
-                newID = idMap[oldID]
-
-                objectBuffer = GetObjectBytes(oldID)
-
-                if not objectBuffer:
-                    #the object is missing or free. I write an empty object so the numbering stays complete
-                    objectBuffer = f"{newID} 0 obj\nnull\nendobj\n".encode('latin1')
-                else:
-                    #Split into the dictionary part and the stream part. Only the dictionary part can be changed
-                    streamMatch = re.search(rb'>>\s*stream', objectBuffer)
-                    if streamMatch:
-                        splitAt = streamMatch.start() + 2
-                    else:
-                        splitAt = len(objectBuffer)
-
-                    dictionaryPart = objectBuffer[:splitAt]
-                    streamPart = objectBuffer[splitAt:]
-
-                    #changing into the new ID header
-                    dictionaryPart = re.sub(rb'^\d+\s+\d+\s+obj', f"{newID} 0 obj".encode('latin1'), dictionaryPart)
-
-                    #changing ref
-                    dictionaryPart = objectRefPattern.sub(replaceRefs, dictionaryPart)
-                    dictionaryPart = parentPattern.sub(f"/Parent {pagesID} 0 R".encode('latin1'), dictionaryPart)
-
-                    objectBuffer = dictionaryPart + streamPart
-                
-                #write objects
-                newXrefTable[newID] = outputPDF.tell()
-                outputPDF.write(objectBuffer)
-
-            xrefOffset = outputPDF.tell()
-            outputPDF.write(b"xref\n")
-            totalObjects = len(newXrefTable) + 1
-            outputPDF.write(f"0 {totalObjects}\n".encode("latin1"))
-            outputPDF.write((b"0000000000 65535 f \n"))
-
-            for i in range(1, totalObjects):
-                offset = newXrefTable[i]
-                outputPDF.write(f"{offset:010d} 00000 n \n".encode("latin1"))
-
-            trailerBytes = (
-                f"trailer\n"
-                f"<<\n"
-                f"  /Size {totalObjects}\n"
-                f"  /Root {catalogID} 0 R\n"
+            #Generating /Catalog Object
+            catalogBytes = (
+                f"{catalogID} 0 obj\n" 
+                f"<<\n" 
+                f"  /Type /Catalog\n"
+                f"  /Pages {pagesID} 0 R\n"
                 f">>\n"
-                f"startxref\n"
-                f"{xrefOffset}\n"
-                f"%%EOF\n"
+                f"endobj\n"
                 ).encode("latin1")
 
-            outputPDF.write(trailerBytes)
+            #Generating the /Pages Root object 
+            pagesBytes = (
+                f"{pagesID} 0 obj\n"
+                f"<<\n"
+                f"  /Type /Pages\n"
+                f"  /Count {pageCount}\n"
+                f"  /Kids [ {kidsArrayStr} ]\n"
+                f">>\n"
+                f"endobj\n"
+                ).encode("latin1")
 
-    def pageParser(currentObjectID):    
-        pagesIDGenList = []
-
-        buffer = GetObjectBytes(currentObjectID)
-        
-        kidsIndex = buffer.find(b"/Kids")
-
-        if kidsIndex == -1:
-            return 
-
-        startBracket = buffer.find(b"[", kidsIndex)
-        endBracket = buffer.find(b"]", startBracket)
-
-        kidsList = buffer[startBracket + 1 : endBracket].split()
-
-        for i in range(len(kidsList)):
-            if kidsList[i] == b"R":
-                objectID = int(kidsList[i-2].decode('latin1'))
-                objectGen = int(kidsList[i-1].decode('latin1'))
-                pagesIDGenList.append([objectID, objectGen])
-
-        for pages in pagesIDGenList:
-            pageID = pages[0]
-            pageGen = pages[1]
-
-            buffer = GetObjectBytes(pageID)
-            if not buffer:
-                continue
-
-            contentIndex = buffer.find(b"/Contents")
-            subkidsIndex = buffer.find(b"/Kids")
-
-            if contentIndex != -1:
-                #MediaBox Extraction
-                MediaBoxList = []
-                MediaBoxIndex = buffer.find(b"/MediaBox")
-
-                if MediaBoxIndex !=-1:
-                    startBracket = buffer.find(b"[", MediaBoxIndex)
-                    endBracket = buffer.find(b"]", startBracket)
-
-                    MediaBoxByteList = buffer[startBracket + 1 : endBracket].split()
-
-                    for value in MediaBoxByteList:
-                        MediaBoxList.append(int(float(value.decode('latin1'))))
-
-                    if not MediaBoxList or len(MediaBoxList) != 4:
-                        MediaBoxList = [0, 0, 612, 792]
-
-                #Rotate
-                Rotate = 0 #This is the default rotate 
-
-                #contents
-                contentsMatch = re.search(rb'/Contents\s+(\d+)\s+\d+\s+R', buffer)
-
-                if not contentsMatch:
-                    contentsMatch = re.search(rb'/Contents\s+(\d+)', buffer)
-
-                if contentsMatch:
-                    contentObjectID = int(contentsMatch.group(1))
-                else: 
-                    contentObjectID = None
-
-                #resources
-                resourcesPattern = re.compile(rb'/Resources\s+(\d+)')
-                resources = resourcesPattern.search(buffer)
-                if resources:
-                    resourcesObjectID = int(resources.group(1))
-                else:
-                    resourcesObjectID = None
-
-                #dependencyIDs: For this I would need to implement a recursive depth first search algorithm 
-                #I will start by adding the pages object ID to the queue
-                #if there are ids in queue 
-                #I will go to one objects id and repeat the process while also popping it out 
-
-                def dependencyCollecter(pageID):
-                    pageID = int(pageID)
-                    visitedIDs = []
-                    dependencies = []
-                    processing = [pageID]
-
-                    while processing:                      
-                        currentID = processing.pop()
-
-                        if currentID in visitedIDs:
-                            continue
-
-                        visitedIDs.append(currentID)
-                        dependencies.append(currentID)
-
-                        buffer = GetObjectBytes(currentID)
-
-                        streamMatch = re.search(rb'>>\s*stream', buffer)
-                        if streamMatch:
-                            buffer = buffer[:streamMatch.start() + 2]
-                        
-                        parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
-                        cleanedBytes = parentPattern.sub(b'', buffer)
-
-                        objectPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
-                        objectsRawBytes = objectPattern.findall(cleanedBytes)
-
-                        for objectIDbytes, _ in objectsRawBytes:
-                            refID = int(objectIDbytes)
-                            if refID != currentID and refID not in visitedIDs:
-                                processing.append(refID)
-
-                    return dependencies
-
-                dependencies = dependencyCollecter(pageID)
-
-                pageEntry = {
-                "pageIndex": len(pagesData) + 1, #index
-                "objectID": [pageID, pageGen], #[ID, Generation]
-                "inheritedAttributes": {"MediaBox": MediaBoxList, "Rotate": Rotate}, #Just extract
-                "directReferences": {"contents": contentObjectID, "resources": resourcesObjectID}, #Objet ID for /Contents streams, Object ID for /Resources 
-                "dependencyIDs": dependencies #list of all child Object IDs
-                }
+            #This function updates the objectIDs inside object headers and refs
+            def replaceRefs(match):
+                refID = int(match.group(1))
+                genNum = match.group(2).decode('latin1')
                 
-                pagesData.append(pageEntry)
+                if refID in idMap:
+                    return f"{idMap[refID]} {genNum} R".encode('latin1')
+                return match.group(0)
 
-            elif subkidsIndex != -1:
-                pageParser(pageID)
+            with open(outputFilename, "wb") as outputPDF:
+                #standard header
+                header = f"%PDF-{PDFVersion}\n%\xe2\xe3\xcf\xd3\n".encode('utf-8')
+                outputPDF.write(header)
 
-    catBuffer = GetObjectBytes(catalogObjectID)
+                #writing /catalog which is object 1
+                newXrefTable[1] = outputPDF.tell()
+                outputPDF.write(catalogBytes)
 
-    pagesMatch = re.search(rb'/Pages\s+(\d+)\s+\d+\s+R', catBuffer)
+                #writing /pages root which is object 2
+                newXrefTable[2] = outputPDF.tell()
+                outputPDF.write(pagesBytes)
 
-    if pagesMatch:
-        pagesObjID = int(pagesMatch.group(1))
-        pageParser(pagesObjID)
+                #These are patternf for object extraction and ref replacements
+                objectRefPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
+                parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
 
-    #print("Pages found:", len(pagesData))
+                #processing all objects now 
+                allOldIDsToWrite = targetPageIDS + dependencyIDsToMap
 
-    if not pagesData:
-        raise ValueError("No pages were found. The file may be damaged or not supported.")
+                for oldID in allOldIDsToWrite:
+                    newID = idMap[oldID]
 
-    numberOfPages = len(pagesData) #trust the pages I really found, not the /Count number
+                    objectBuffer = GetObjectBytes(PDF, XrefTable, oldID, objStmCache)
 
-    if splitPage < 2 or splitPage > numberOfPages:
-        raise ValueError(f"splitPage must be between 2 and {numberOfPages}")
+                    if not objectBuffer:
+                        #the object is missing or free. I write an empty object so the numbering stays complete
+                        objectBuffer = f"{newID} 0 obj\nnull\nendobj\n".encode('latin1')
+                    else:
+                        #Split into the dictionary part and the stream part. Only the dictionary part can be changed
+                        streamMatch = re.search(rb'>>\s*stream', objectBuffer)
+                        if streamMatch:
+                            splitAt = streamMatch.start() + 2
+                        else:
+                            splitAt = len(objectBuffer)
 
-    #Now I will get the user split page input
-    #extract the target pages data frm pagesData
-    #Map old source IDS to new IDs eg 14 to 1
-    #Rewrite all indirect references in the file and track the new byte offsets
-    #lastly build the new xreftable and trailer
-    #These steps will be done for both of the division
+                        dictionaryPart = objectBuffer[:splitAt]
+                        streamPart = objectBuffer[splitAt:]
 
-    #user input of number number. The splitPage will go into the second part.
-    #splitPage = 3 means split at the 3rd page so it will go in the second part
-    #I will add more spliting when making the UI
-    #Index starts at 1
-    part1Index = splitPage - 1
-    part2Index = numberOfPages
+                        #changing into the new ID header
+                        dictionaryPart = re.sub(rb'^\d+\s+\d+\s+obj', f"{newID} 0 obj".encode('latin1'), dictionaryPart)
 
-    part1Pages = pagesData[:part1Index]
-    part2Pages = pagesData[part1Index:part2Index]
+                        #changing ref
+                        dictionaryPart = objectRefPattern.sub(replaceRefs, dictionaryPart)
+                        dictionaryPart = parentPattern.sub(f"/Parent {pagesID} 0 R".encode('latin1'), dictionaryPart)
 
-    #I will now get the objects needed for each part. I amd doing for part 1
-    #requiredObjectIDS = set() #using datatype set so the list doesn't have repeated values 
-    #pageObjectIDs = []
+                        objectBuffer = dictionaryPart + streamPart
+                    
+                    #write objects
+                    newXrefTable[newID] = outputPDF.tell()
+                    outputPDF.write(objectBuffer)
 
-    PDFName = os.path.basename(PDFPath).split(".")[0]
+                xrefOffset = outputPDF.tell()
+                outputPDF.write(b"xref\n")
+                totalObjects = len(newXrefTable) + 1
+                outputPDF.write(f"0 {totalObjects}\n".encode("latin1"))
+                outputPDF.write((b"0000000000 65535 f \n"))
 
-    ExportPDFPart(part1Pages, f"Outputs/{PDFName}_Part1.pdf")
-    ExportPDFPart(part2Pages, f"Outputs/{PDFName}_Part2.pdf")
+                for i in range(1, totalObjects):
+                    offset = newXrefTable[i]
+                    outputPDF.write(f"{offset:010d} 00000 n \n".encode("latin1"))
 
-    PDF.close()  
+                trailerBytes = (
+                    f"trailer\n"
+                    f"<<\n"
+                    f"  /Size {totalObjects}\n"
+                    f"  /Root {catalogID} 0 R\n"
+                    f">>\n"
+                    f"startxref\n"
+                    f"{xrefOffset}\n"
+                    f"%%EOF\n"
+                    ).encode("latin1")
+
+                outputPDF.write(trailerBytes)
+
+        def pageParser(currentObjectID):    
+            pagesIDGenList = []
+
+            buffer = GetObjectBytes(PDF, XrefTable, currentObjectID, objStmCache)
+            
+            kidsIndex = buffer.find(b"/Kids")
+
+            if kidsIndex == -1:
+                return 
+
+            startBracket = buffer.find(b"[", kidsIndex)
+            endBracket = buffer.find(b"]", startBracket)
+
+            kidsList = buffer[startBracket + 1 : endBracket].split()
+
+            for i in range(len(kidsList)):
+                if kidsList[i] == b"R":
+                    objectID = int(kidsList[i-2].decode('latin1'))
+                    objectGen = int(kidsList[i-1].decode('latin1'))
+                    pagesIDGenList.append([objectID, objectGen])
+
+            for pages in pagesIDGenList:
+                pageID = pages[0]
+                pageGen = pages[1]
+
+                buffer = GetObjectBytes(PDF, XrefTable, pageID, objStmCache)
+                if not buffer:
+                    continue
+
+                contentIndex = buffer.find(b"/Contents")
+                subkidsIndex = buffer.find(b"/Kids")
+
+                if contentIndex != -1:
+                    #MediaBox Extraction
+                    MediaBoxList = []
+                    MediaBoxIndex = buffer.find(b"/MediaBox")
+
+                    if MediaBoxIndex !=-1:
+                        startBracket = buffer.find(b"[", MediaBoxIndex)
+                        endBracket = buffer.find(b"]", startBracket)
+
+                        MediaBoxByteList = buffer[startBracket + 1 : endBracket].split()
+
+                        for value in MediaBoxByteList:
+                            MediaBoxList.append(int(float(value.decode('latin1'))))
+
+                        if not MediaBoxList or len(MediaBoxList) != 4:
+                            MediaBoxList = [0, 0, 612, 792]
+
+                    #Rotate
+                    Rotate = 0 #This is the default rotate 
+
+                    #contents
+                    contentsMatch = re.search(rb'/Contents\s+(\d+)\s+\d+\s+R', buffer)
+
+                    if not contentsMatch:
+                        contentsMatch = re.search(rb'/Contents\s+(\d+)', buffer)
+
+                    if contentsMatch:
+                        contentObjectID = int(contentsMatch.group(1))
+                    else: 
+                        contentObjectID = None
+
+                    #resources
+                    resourcesPattern = re.compile(rb'/Resources\s+(\d+)')
+                    resources = resourcesPattern.search(buffer)
+                    if resources:
+                        resourcesObjectID = int(resources.group(1))
+                    else:
+                        resourcesObjectID = None
+
+                    #dependencyIDs: For this I would need to implement a recursive depth first search algorithm 
+                    #I will start by adding the pages object ID to the queue
+                    #if there are ids in queue 
+                    #I will go to one objects id and repeat the process while also popping it out 
+
+                    def dependencyCollecter(pageID):
+                        pageID = int(pageID)
+                        visitedIDs = []
+                        dependencies = []
+                        processing = [pageID]
+
+                        while processing:                      
+                            currentID = processing.pop()
+
+                            if currentID in visitedIDs:
+                                continue
+
+                            visitedIDs.append(currentID)
+                            dependencies.append(currentID)
+
+                            buffer = GetObjectBytes(PDF, XrefTable, currentID, objStmCache)
+
+                            streamMatch = re.search(rb'>>\s*stream', buffer)
+                            if streamMatch:
+                                buffer = buffer[:streamMatch.start() + 2]
+                            
+                            parentPattern = re.compile(rb'/Parent\s+\d+\s+\d+\s+R')
+                            cleanedBytes = parentPattern.sub(b'', buffer)
+
+                            objectPattern = re.compile(rb'(\d+)\s+(\d+)\s+R')
+                            objectsRawBytes = objectPattern.findall(cleanedBytes)
+
+                            for objectIDbytes, _ in objectsRawBytes:
+                                refID = int(objectIDbytes)
+                                if refID != currentID and refID not in visitedIDs:
+                                    processing.append(refID)
+
+                        return dependencies
+
+                    dependencies = dependencyCollecter(pageID)
+
+                    pageEntry = {
+                    "pageIndex": len(pagesData) + 1, #index
+                    "objectID": [pageID, pageGen], #[ID, Generation]
+                    "inheritedAttributes": {"MediaBox": MediaBoxList, "Rotate": Rotate}, #Just extract
+                    "directReferences": {"contents": contentObjectID, "resources": resourcesObjectID}, #Objet ID for /Contents streams, Object ID for /Resources 
+                    "dependencyIDs": dependencies #list of all child Object IDs
+                    }
+                    
+                    pagesData.append(pageEntry)
+
+                elif subkidsIndex != -1:
+                    pageParser(pageID)
+
+        catBuffer = GetObjectBytes(PDF, XrefTable, catalogObjectID, objStmCache)
+
+        pagesMatch = re.search(rb'/Pages\s+(\d+)\s+\d+\s+R', catBuffer)
+
+        if pagesMatch:
+            pagesObjID = int(pagesMatch.group(1))
+            pageParser(pagesObjID)
+
+        #print("Pages found:", len(pagesData))
+
+        if not pagesData:
+            raise ValueError("No pages were found. The file may be damaged or not supported.")
+
+        numberOfPages = len(pagesData) #trust the pages I really found, not the /Count number
+
+        if splitPage < 2 or splitPage > numberOfPages:
+            raise ValueError(f"splitPage must be between 2 and {numberOfPages}")
+
+        #Now I will get the user split page input
+        #extract the target pages data frm pagesData
+        #Map old source IDS to new IDs eg 14 to 1
+        #Rewrite all indirect references in the file and track the new byte offsets
+        #lastly build the new xreftable and trailer
+        #These steps will be done for both of the division
+
+        #user input of number number. The splitPage will go into the second part.
+        #splitPage = 3 means split at the 3rd page so it will go in the second part
+        #I will add more spliting when making the UI
+        #Index starts at 1
+        part1Index = splitPage - 1
+        part2Index = numberOfPages
+
+        part1Pages = pagesData[:part1Index]
+        part2Pages = pagesData[part1Index:part2Index]
+
+        #I will now get the objects needed for each part. I amd doing for part 1
+        #requiredObjectIDS = set() #using datatype set so the list doesn't have repeated values 
+        #pageObjectIDs = []
+
+        PDFName = os.path.basename(PDFPath).split(".")[0]
+
+        ExportPDFPart(part1Pages, f"Outputs/{PDFName}_Part1.pdf")
+        ExportPDFPart(part2Pages, f"Outputs/{PDFName}_Part2.pdf")
+
+        PDF.close()
+    except:
+        print("Error")  
+        
 
 SplitPDF("Inputs/sample-local-pdf.pdf", 2)

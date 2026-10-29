@@ -9,10 +9,8 @@ e.g
     PDF_Data = [
         {"OriginalID" : 2,
         "NewID" : 12,
-        "Offset" : 2345}
+        "Content" : 2345}
     ]
-
-NewID is only in the PDF 2 data
 
 BASIC DESIGN CHOICES
 - cannot open PDF in "r" mode because of different types of data, so we use "rb" this opens in binary
@@ -22,15 +20,6 @@ PDF Version 1.7:
 Whats New:
 - Object streams = /Type /ObjStm - these are many small objects packed into 1
 - Cross-refernce streams = /Type /XRef = the xref table is stored as a compressed binary stream
-
-OBJECT FIND STRING DETAILS
-the paranthesis divide it into groups so tha twe can later access the id directly
-with () we can use the .group command on it 
-.group(0) gives the whole match 
-.group(1) gives the first bracket 
-.group(2) gives the second bracket
-+ sign here signifies or more digits so this allows for multiple digit ids
-.start() gives the byte offset which can also be taken from span[0]
 '''
 import re
 from helperfunctions import *
@@ -42,7 +31,7 @@ pdf4 = "Inputs\\file-example_PDF_500_kB.pdf"
 # pdf4 = "Inputs\\emaar.pdf"
 
 def Merge_PDF(pdf1, pdf2):
-    # try:
+    try:
         #rb mode is for read only in binary mode
         PDF1 = open(pdf1, "rb")
         PDF2 = open(pdf2, "rb")
@@ -80,18 +69,22 @@ def Merge_PDF(pdf1, pdf2):
             ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
             ParentID = int((re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)).group(1))
             IDS_to_Remove.append(ParentID)
-            
-            ParentBody = GetObjectBytes(PDF, XrefTable, ParentID, DecompressedObjs)
-            ParentBody = ParentBody.decode('latin1')
-
-            # print(ParentBody)
+            try:
+                ParentBody = GetObjectBytes(PDF, XrefTable, ParentID, DecompressedObjs)
+                ParentBody = ParentBody.decode('latin1')
+                KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
+            except:
+                ParentBodyStart = (re.search(fr"\b{ParentID}\s+0\s+obj", PDF_Data, flags=re.IGNORECASE)).start()
+                ParentBodyEnd = (re.search(objectEndString, PDF_Data[ParentBodyStart:], flags=re.IGNORECASE)).end() + ParentBodyStart  
+                ParentBody = PDF_Data[ParentBodyStart:ParentBodyEnd]
+                KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
 
             #  searches for the kids in the parent obj and appends in the list
             KidsFindString = r"(\d+)\s*0\s*R"
-            KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
+            
             KidEnd = (re.search("]", ParentBody[KidStart:], flags=re.IGNORECASE)).end() + KidStart
-
             Kids = re.finditer(KidsFindString, ParentBody[KidStart:KidEnd], flags=re.IGNORECASE)
+
             Kids_List = []
             for kid in Kids:
                 Kids_List.append(int(kid.group(1)))
@@ -116,7 +109,6 @@ def Merge_PDF(pdf1, pdf2):
 
                 # replaces the subParents with the new pages list
                 Kids_List = KidPages
-
             return Kids_List, IDS_to_Remove, ParentID
       
         PDF1_Pages_List, RemoveIDS1, PDF1_Parent = FindParentsandKids(PDF1, XrefTable1, Root1, pdf1String, DecompressedObjs1)
@@ -132,8 +124,7 @@ def Merge_PDF(pdf1, pdf2):
             for objID, objData in xreftab.items():
                 if objData.get("type") == "n" and objData.get("offset") > 0:
                     offset = objData['offset']
-                    ObjEndStr = r"\bendobj"
-                    ObjEnd = (re.search(ObjEndStr, pdfDataStr[offset:], flags=re.IGNORECASE)).start() + offset
+                    ObjEnd = (re.search(objectEndString, pdfDataStr[offset:], flags=re.IGNORECASE)).start() + offset
                     newID = objID + idOffset
                     ObjectList.append({
                         "OriginalID" : int(objID),
@@ -163,7 +154,6 @@ def Merge_PDF(pdf1, pdf2):
                 NewObj = f"\n{NewObj} \nendobj\n"
                 body2Str += (NewObj)
 
-
         # Function for Changing the Parent of each OBJ
         def ParentIDChange(PDFstr, OldParentID, NewParentID):
             newParentStr = (f"/Parent {NewParentID} 0 R")
@@ -192,7 +182,6 @@ def Merge_PDF(pdf1, pdf2):
 
             return newParent
 
-
         body2Str = PDF_ID_Remap(PDF2_Data ,body2Str , "OriginalID")
 
         '''###### MAKING & INITIALIZING THE NEW PARENT & CATALOG OBJECT ######'''
@@ -209,8 +198,7 @@ def Merge_PDF(pdf1, pdf2):
         #forms a string of the new header, pd1, pdf2, parent and catalog object
         CombinePDFStr = headerObj + PDF1_Final + PDF2_Final + parentObj + catalogObj
 
-        #making xref table
-        objectFindString = r"\b(\d+)\s+(\d+)\s+obj" 
+        #making xref
         xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
 
         CombinePDFStr += xreftable
@@ -230,8 +218,8 @@ def Merge_PDF(pdf1, pdf2):
 
         PDF1.close
         PDF2.close
-    # except:
-    #     print("Error")
+    except:
+        print("Error")
 
 
 Merge_PDF(pdf3, pdf4)

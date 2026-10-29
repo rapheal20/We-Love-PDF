@@ -2,6 +2,37 @@ import os
 import re
 import zlib
 
+'''CONSTANTS'''
+
+# OBJECT FIND STRING DETAILS
+# the paranthesis divide it into groups so tha twe can later access the id directly
+# with () we can use the .group command on it 
+# .group(0) gives the whole match 
+# .group(1) gives the first bracket 
+# .group(2) gives the second bracket
+# + sign here signifies or more digits so this allows for multiple digit ids
+# .start() gives the byte offset which can also be taken from span[0]
+
+#for finding objects
+objectFindString = r"\b(\d+)\s+(\d+)\s+obj\b" 
+objectEndString = r"\bendobj"
+
+# for finding refernces
+refFindString = r"\s*(\d+)\s+(\d+)\s+R" 
+
+#for finding trailer
+trailerFindString = r"/\s*Root\s+(\d+)\s+(\d+)\s+R" #\s* represents no or more spaces
+
+#for finding catalog
+catalogFindString = r"\s*/\s*Type\s*/\s*Catalog\s*"
+
+#for finding images objects
+imgFindStr = r"\s*/\s*Subtype\s*/\s*Image\s*"
+'''END OF CONSTANTS'''
+
+
+
+
 #Returns PDF version
 def PDFVersionFunc(PDFPath):
     PDF = open(PDFPath, "rb")
@@ -213,8 +244,6 @@ def XrefTableFunc(PDFPath):
 
     PDF.close()
 
-#print(XrefTableFunc("Inputs/emaar1.pdf"))
-
 #Returns the RootObjectID of the PDF
 def RootObjectIDFunc(PDFPath):
     with open(PDFPath, "rb") as PDF:
@@ -227,7 +256,6 @@ def RootObjectIDFunc(PDFPath):
         return int(allRoots[-1])
 
     return None
-
 
 #Finds where one object ends (its endobj) in the bytes read so far, or None if more bytes are needed.
 #Streams are skipped using /Length so binary data that happens to contain "endobj" can't cut the object short
@@ -274,8 +302,6 @@ def GetObjectBytes(PDF, XrefTable, objectID, objStmCache):
         if cut is not None:
             return cut
 
-
-    
 #Opens one object stream and returns {objectID: bytes of that object}
 def ReadObjectStream(PDF, XrefTable, streamID, objStmCache):
     if streamID in objStmCache:
@@ -314,10 +340,6 @@ def ReadObjectStream(PDF, XrefTable, streamID, objStmCache):
     objStmCache[streamID] = result
     return result
 
-
-
-'''BY RAPHEAL'''
-
 # Makes new header object
 # input is the decoded string of the PDF
 # returns the final header as a string, can be added to pdf directly
@@ -329,9 +351,6 @@ def Make_Header(pdfString):
     #these series of characters are added to tell that the pdf to read character like \n for new line
     PDFheader = version + "\n%âãÏÓ\n"
     return PDFheader
-
-
-
 
 # makes the xref table with formatting as a string
 # takes the object find string and the final pdf string
@@ -367,7 +386,6 @@ def Make_Xref(objectFindString, FinalPDFStr):
 
 #remaps the ids of PDF with the new ids
 #returns the new pdf string, can be directly used
-
 #PDF_Data is a list
 #here PDF_Data is the list of all objects in the PDF
 def PDF_ID_Remap(PDF_Data, PDFString, OriginalID):
