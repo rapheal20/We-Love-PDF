@@ -4,6 +4,7 @@ import os
 
 from MergePDF import MergePDFFunc
 from SplitPDF import SplitPDFFunc
+from CompressPDF import PDFCompressFunc
 
 app = Flask(__name__)
 
@@ -61,7 +62,22 @@ def SplitPDF():
 
 @app.route('/CompressPDF', methods=["GET", "POST"])
 def CompressPDF():
-    return render_template("CompressPDF.html")
+    if request.method == "GET":
+        return render_template("CompressPDF.html")
+
+    elif request.method == "POST":
+        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+
+        file = request.files["files"]
+        
+        filename = secure_filename(file.filename)
+        fullPath = os.path.join(path, filename)
+        file.save(fullPath)
+
+        outputPaths = PDFCompressFunc(fullPath)
+
+        outputType = "Compressed PDF"
+        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route('/PDFToWord', methods=["GET", "POST"])
 def PDFToWord():

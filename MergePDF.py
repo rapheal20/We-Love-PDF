@@ -199,7 +199,7 @@ def MergePDFFunc(*pdfs):
         with open(f"AppOutputs\\{PDFName}-Merged.pdf" , "wb") as file:
             file.write(encodedPDF)
 
-        return f"AppOutputs\\{PDFName}-Merged.pdf"
+        return [f"AppOutputs\\{PDFName}-Merged.pdf"]
     except Exception as e:
         print(e)
         raise

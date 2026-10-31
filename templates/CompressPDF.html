@@ -3,9 +3,195 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CompressPDF</title>
+    <title>Compress PDF</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
-    CompressPDF
+    <div style="position: relative; min-height: 100vh; font-family: sans-serif; background-color: #f8f9fa; padding: 40px; box-sizing: border-box;">
+        
+        <h2 align="center">Upload a file to Compress PDF </h2>
+
+        <form id="uploadForm" action="/CompressPDF" method="POST" enctype="multipart/form-data">
+            
+            <input type="file" id="fileInput" name="files" accept="application/pdf" style="display: none;">
+
+            <div id="dropzone" style="border: 3px dashed #ccc; border-radius: 12px; padding: 80px 20px; background: #ffffff; text-align: center; cursor: pointer; transition: border-color 0.2s;">
+                <p style="font-size: 48px; margin: 0 0 10px 0; color: #ff4d4d;">📁</p>
+                <p style="margin: 0 0 15px 0; color: #666; font-weight: bold;">Drag and drop your PDF file here</p>
+                <button type="button" id="browseBtn" style="background: #e5322d; color: white; border: none; padding: 12px 30px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer;">
+                    Select PDF File
+                </button>
+            </div>
+
+            <div id="workspace" style="display: none;">
+                
+                <div id="previewGrid" style="display: flex; flex-wrap: wrap; gap: 20px;">
+                </div>
+
+                <div>
+                    
+                </div>
+
+                <div style="position: fixed; bottom: 40px; right: 40px;">
+                    <button type="submit" style="background: #e5322d; color: white; border: none; padding: 18px 40px; font-size: 18px; font-weight: bold; border-radius: 8px; cursor: pointer; box-shadow: 0 5px 15px rgba(229,50,45,0.4); display: flex; align-items: center; gap: 10px;">
+                        <span style="text-transform: capitalize;">Compress PDF</span>
+                        <span>➔</span>
+                    </button>
+                </div>
+
+            </div>
+        </form>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const dropzone = document.getElementById('dropzone');
+        const workspace = document.getElementById('workspace');
+        const previewGrid = document.getElementById('previewGrid');
+        const fileInput = document.getElementById('fileInput');
+        const browseBtn = document.getElementById('browseBtn');
+
+        let selectedFiles = [];
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.style.borderColor = '#e5322d';
+                dropzone.style.backgroundColor = '#fff5f5';
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropzone.style.borderColor = '#ccc';
+                dropzone.style.backgroundColor = '#ffffff';
+            }, false);
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            selectedFiles = [files[0]];
+
+            const dataTransfer = new DataTransfer();
+            selectedFiles.forEach(file => dataTransfer.items.add(file));
+            
+            fileInput.files = dataTransfer.files;
+
+            dropzone.style.display = 'none';
+            workspace.style.display = 'block';
+
+            renderPreviews();
+        }
+
+        function renderPreviews() {
+            previewGrid.innerHTML = '';
+
+            selectedFiles.forEach((file) => {
+                const card = document.createElement('div');
+                card.style.background = 'white';
+                card.style.border = '1px solid #e0e0e0';
+                card.style.borderRadius = '8px';
+                card.style.width = '200px';
+                card.style.padding = '15px';
+                card.style.boxShadow = '0 4px 6px rgba(0,0,0,0.02)';
+                card.style.display = 'flex';
+                card.style.flexDirection = 'column';
+                card.style.alignItems = 'center';
+
+                const thumbnail = document.createElement('div');
+                thumbnail.style.width = '100%';
+                thumbnail.style.height = '160px';
+                thumbnail.style.backgroundColor = '#f1f3f5';
+                thumbnail.style.borderRadius = '4px';
+                thumbnail.style.border = '1px solid #eee';
+                thumbnail.style.display = 'flex';
+                thumbnail.style.alignItems = 'center';
+                thumbnail.style.justifyContent = 'center';
+                thumbnail.style.marginBottom = '12px';
+                thumbnail.style.overflow = 'hidden';
+                
+                const canvas = document.createElement('canvas');
+                canvas.style.maxWidth = '100%';
+                canvas.style.maxHeight = '100%';
+                canvas.style.display = 'none';
+
+                const loadingSpinner = document.createElement('span');
+                loadingSpinner.style.fontSize = '11px';
+                loadingSpinner.style.color = '#999';
+                loadingSpinner.textContent = 'Loading...';
+
+                thumbnail.appendChild(loadingSpinner);
+                thumbnail.appendChild(canvas);
+
+                const nameLabel = document.createElement('div');
+                nameLabel.style.fontSize = '13px';
+                nameLabel.style.color = '#495057';
+                nameLabel.style.width = '100%';
+                nameLabel.style.whiteSpace = 'nowrap';
+                nameLabel.style.overflow = 'hidden';
+                nameLabel.style.textOverflow = 'ellipsis';
+                nameLabel.style.textAlign = 'center';
+                nameLabel.textContent = file.name;
+
+                card.appendChild(thumbnail);
+                card.appendChild(nameLabel);
+                previewGrid.appendChild(card);
+                
+                if (file.type === 'application/pdf') {
+                    const fileReader = new FileReader();
+                    
+                    fileReader.onload = function() {
+                        const typedArray = new Uint8Array(this.result);
+
+                        pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+                            return pdf.getPage(1); 
+                        }).then(function(page) {
+                            const context = canvas.getContext('2d');
+                            
+                            const unscaledViewport = page.getViewport({ scale: 1 });
+                            const scale = 160 / unscaledViewport.height; 
+                            const viewport = page.getViewport({ scale: scale });
+
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+
+                            const renderContext = {
+                                canvasContext: context,
+                                viewport: viewport
+                            };
+
+                            return page.render(renderContext).promise;
+                        }).then(function() {
+                            loadingSpinner.style.display = 'none';
+                            canvas.style.display = 'block';
+                        }).catch(function(error) {
+                            console.error('Error rendering PDF page preview:', error);
+                            loadingSpinner.textContent = 'Preview Error';
+                        });
+                    };
+
+                    fileReader.readAsArrayBuffer(file);
+                } else {
+                    loadingSpinner.textContent = 'Not a PDF';
+                }
+            });
+        }
+    </script>
 </body>
 </html>
