@@ -1,6 +1,7 @@
 import os
 import re
 import zlib
+import mmap
 
 '''CONSTANTS'''
 
@@ -43,10 +44,8 @@ def PDFVersionFunc(PDFPath):
     return PDFVersion
 
 def parseASCIIXref(PDFcontent: bytes, offset: int, xrefTable: dict):
-    lines = PDFcontent[offset:].split(b"\n")
-
-    if not lines[0].startswith(b"xref"):
-        lines = PDFcontent[offset:].replace(b"\r", b"\n").split(b"\n")
+    end = PDFcontent.find(b"trailer", offset)       #only this section, not the whole rest of the file
+    lines = re.split(rb"\r\n|\r|\n", PDFcontent[offset:end + 7 if end != -1 else len(PDFcontent)])
 
     index = 1
     while index < len(lines):
@@ -202,35 +201,50 @@ def XrefTableFunc(PDFPath):
     xrefTable = {}
     xrefAddresses = []
 
-    PDF = open(PDFPath, "rb")
-    PDFcontent = PDF.read()
+    with open(PDFPath, "rb") as PDF:
+        PDFcontent = PDF.read()
 
     startXrefMatches = list(re.finditer(rb"startxref\s+(\d+)", PDFcontent))
 
     xrefStreamMatches = list(re.finditer(rb"(\d+)\s+(\d+)\s+obj\s*<<(?:(?!endobj)[\s\S]){0,600}?\/Type\s*\/XRef", PDFcontent)) 
 
-    #First method: Processing using the startxref pointers
-    if startXrefMatches:
-        for match in startXrefMatches:
-            offset = int(match.group(1))
-            if offset == 0 or offset >= len(PDFcontent): #0 means the header so skip it 
-                continue
+    #Reads one xref section (old table or stream) and adds ONLY the objects not already known, so the newest section wins.
+    #Returns the offsets of the sections it points to with /Prev (older section) and /XRefStm (hybrid files)
+    def addSection(offset):
+        section = {}
+        if PDFcontent[offset: offset + 20].strip().startswith(b"xref"): #Older version
+            parseASCIIXref(PDFcontent, offset, section)
+            trailerStart = PDFcontent.find(b"trailer", offset)
+            dictBytes = PDFcontent[trailerStart: trailerStart + 2000].split(b"startxref")[0] if trailerStart != -1 else b""
+        else:
+            parseXrefStream(PDFcontent, offset, section)
+            dictBytes = PDFcontent[offset: offset + 5000].split(b"stream")[0]
+        for objectID, entry in section.items():
+            xrefTable.setdefault(objectID, entry)
+        return [int(x) for x in re.findall(rb"/(?:XRefStm|Prev)\s+(\d+)", dictBytes)]
 
-            xrefAddresses.append(offset)
-
-            peek = PDFcontent[offset: offset + 20].strip() #checking the offset location to find format
-
-            if peek.startswith(b"xref"): #Older version
-                parseASCIIXref(PDFcontent, offset, xrefTable)
-            else: 
-                parseXrefStream(PDFcontent, offset, xrefTable)
+    #First method: the startxref pointers, newest first, and every /Prev after them (linearized and updated files have several sections)
+    pending = [int(match.group(1)) for match in reversed(startXrefMatches)]
+    seen = set()
+    while pending:
+        offset = pending.pop(0)
+        if offset in seen or offset <= 0 or offset >= len(PDFcontent): #0 means the header so skip it 
+            continue
+        seen.add(offset)
+        xrefAddresses.append(offset)
+        try:
+            pending[0:0] = addSection(offset)
+        except Exception:
+            continue
     
     #Second method: hybrid streams
-    if xrefStreamMatches:
-        for match in xrefStreamMatches:
-            streamOffset = match.start()
-            xrefAddresses.append(streamOffset)
-            parseXrefStream(PDFcontent, streamOffset, xrefTable)
+    for match in xrefStreamMatches:
+        if match.start() not in seen:
+            xrefAddresses.append(match.start())
+            try:
+                addSection(match.start())
+            except Exception:
+                pass
 
     #this is another backup where if the xref table offset is wrong so I will find the xref table directly as work
     if not xrefTable:
@@ -240,9 +254,20 @@ def XrefTableFunc(PDFPath):
             if xrefTable:
                 break
 
-    return xrefTable, xrefAddresses
+    #repair: adds objects the xref missed and fixes offsets which do not point to their object
+    added = set()
+    for found in re.finditer(rb"(?:^|[\r\n])[ \t]*(\d+)\s+\d+\s+obj\b", PDFcontent):
+        objectID, position = int(found.group(1)), found.start(1)
+        entry = xrefTable.get(objectID)
+        if entry is None or objectID in added: #later copy of a missing object = newest one
+            xrefTable[objectID] = {"offset": position, "generation": 0, "type": "n"}
+            added.add(objectID)
+        elif entry["type"] == "n" and entry["offset"] > 0:
+            atOffset = re.match(rb"\s*(\d+)\s+\d+\s+obj\b", PDFcontent[entry["offset"]: entry["offset"] + 30])
+            if atOffset is None or int(atOffset.group(1)) != objectID:
+                entry["offset"] = position
 
-    PDF.close()
+    return xrefTable, xrefAddresses
 
 #Returns the RootObjectID of the PDF
 def RootObjectIDFunc(PDFPath):
@@ -259,25 +284,34 @@ def RootObjectIDFunc(PDFPath):
 
 #Finds where one object ends (its endobj) in the bytes read so far, or None if more bytes are needed.
 #Streams are skipped using /Length so binary data that happens to contain "endobj" can't cut the object short
-def cutObject(data):
-    endObj = data.find(b"endobj")
-    streamStart = re.search(rb"[>\s]stream(?:\r\n|\n|\r)", data)
-    if streamStart and (endObj == -1 or streamStart.start() < endObj):
-        lengthMatch = re.search(rb"/Length\s+(\d+)(?!\d|\s+\d+\s+R)", data[:streamStart.start()])
+#some PDFs have no endobj: an object also ends at the next object header or at xref/trailer
+endObjFindString = re.compile(rb"\d+\s+\d+\s+obj\b|[\r\n](?:xref|trailer|startxref)\b")
+streamFindString = re.compile(rb"[>\s]stream(?:\r\n|\n|\r)")
+lengthFindString = re.compile(rb"/Length\s+(\d+)(?!\d|\s+\d+\s+R)")
+
+#Returns the bytes of the ONE object that starts at pos (without its endobj). data can be bytes or a memory mapped file.
+#Streams are skipped using /Length so binary data that happens to contain "endobj" can't cut the object short
+def cutObject(data, pos=0):
+    nextObj = endObjFindString.search(data, data.find(b"obj", pos) + 3)
+    endObj = data.find(b"endobj", pos, nextObj.start() if nextObj else len(data))
+    limit = endObj if endObj != -1 else (nextObj.start() if nextObj else len(data))
+
+    streamStart = streamFindString.search(data, pos, limit)
+    if streamStart:
+        endStream = -1
+        lengthMatch = lengthFindString.search(data, pos, streamStart.start())
         if lengthMatch:
             skip = streamStart.end() + int(lengthMatch.group(1))
-            if len(data) < skip + 12:
-                return None
             if data[skip:skip + 12].lstrip().startswith(b"endstream"):
                 endStream = skip
-            else:
-                endStream = data.find(b"endstream", streamStart.end())
-        else:
+        if endStream == -1:
             endStream = data.find(b"endstream", streamStart.end())
         if endStream == -1:
-            return None
-        endObj = data.find(b"endobj", endStream)
-    return None if endObj == -1 else data[:endObj]
+            return data[pos:limit]
+        nextObj = endObjFindString.search(data, endStream)
+        endObj = data.find(b"endobj", endStream, nextObj.start() if nextObj else len(data))
+        limit = endObj if endObj != -1 else (nextObj.start() if nextObj else len(data))
+    return data[pos:limit]
 
 #Returns the bytes of an object as "ID 0 obj ... endobj", for normal AND compressed objects
 def GetObjectBytes(PDF, XrefTable, objectID, objStmCache):
@@ -291,16 +325,10 @@ def GetObjectBytes(PDF, XrefTable, objectID, objStmCache):
         body = ReadObjectStream(PDF, XrefTable, entry['offset'], objStmCache).get(objectID, b"")
         return f"{objectID} 0 obj\n".encode('latin1') + body + b"\nendobj\n"
 
-    PDF.seek(entry['offset'])
-    data = b""
-    while True:
-        more = PDF.read(65536)
-        if not more:
-            return data.split(b"endobj")[0]      #end of file: use what there is
-        data += more
-        cut = cutObject(data)
-        if cut is not None:
-            return cut
+    #the file is memory mapped once (kept in the cache), so no object is ever copied around while searching for its end
+    if "mm" not in objStmCache:
+        objStmCache["mm"] = mmap.mmap(PDF.fileno(), 0, access=mmap.ACCESS_READ)
+    return cutObject(objStmCache["mm"], entry['offset'])
 
 #Opens one object stream and returns {objectID: bytes of that object}
 def ReadObjectStream(PDF, XrefTable, streamID, objStmCache):

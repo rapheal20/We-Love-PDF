@@ -55,7 +55,7 @@ def SplitPDF():
         file.save(fullPath)
 
         outputPaths = SplitPDFFunc(fullPath, page)
-                
+            
         outputType = "PDF"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 

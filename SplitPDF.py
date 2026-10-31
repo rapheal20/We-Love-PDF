@@ -197,6 +197,12 @@ def SplitPDFFunc(PDFPath, splitPage):
 
                         objectBuffer = dictionaryPart + streamPart
                     
+                    #objects from the file may or may not end with endobj, so it is always cut off and added once
+                    objectBuffer = objectBuffer.rstrip()
+                    if objectBuffer.endswith(b"endobj"):
+                        objectBuffer = objectBuffer[:-6].rstrip()
+                    objectBuffer += b"\nendobj\n"
+
                     #write objects
                     newXrefTable[newID] = outputPDF.tell()
                     outputPDF.write(objectBuffer)
@@ -256,7 +262,7 @@ def SplitPDFFunc(PDFPath, splitPage):
                 contentIndex = buffer.find(b"/Contents")
                 subkidsIndex = buffer.find(b"/Kids")
 
-                if contentIndex != -1:
+                if subkidsIndex == -1: #a page (also one with no /Contents, e.g. a blank page)
                     #MediaBox Extraction
                     MediaBoxList = []
                     MediaBoxIndex = buffer.find(b"/MediaBox")
@@ -346,7 +352,7 @@ def SplitPDFFunc(PDFPath, splitPage):
                     
                     pagesData.append(pageEntry)
 
-                elif subkidsIndex != -1:
+                else:
                     pageParser(pageID)
 
         catBuffer = GetObjectBytes(PDF, XrefTable, catalogObjectID, objStmCache)
@@ -397,7 +403,8 @@ def SplitPDFFunc(PDFPath, splitPage):
 
         return [f"AppOutputs/{PDFName}_Part1.pdf", f"AppOutputs/{PDFName}_Part2.pdf"]
     except:
-        print("Error")  
+        print("Error")
+        raise
         
 
-#SplitPDF("Inputs/sample-local-pdf.pdf", 2)
+#SplitPDFFunc("Inputs/emaar2.pdf", 6)

@@ -34,9 +34,8 @@ def MergePDFFunc(*pdfs):
     try:
         def FindParentsandKids(PDF, XrefTable, RootID, PDF_Data, DecompressedObjs):
             IDS_to_Remove = [RootID]
-            ParentRefOffset = XrefTable[RootID]['offset']
             ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
-            ParentID = int((re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)).group(1))
+            ParentID = int((re.search(ParentFindStr, GetObjectBytes(PDF, XrefTable, RootID, DecompressedObjs).decode('latin1'), flags=re.IGNORECASE)).group(1))
             IDS_to_Remove.append(ParentID)
             try:
                 ParentBody = GetObjectBytes(PDF, XrefTable, ParentID, DecompressedObjs)
@@ -88,16 +87,23 @@ def MergePDFFunc(*pdfs):
                 Kids_List = KidPages
             return Kids_List, IDS_to_Remove, ParentID
 
-        # shifts every "N G R" reference and "N G obj" header by offset in ONE pass (no double renumbering)
+        STREAM_RE = re.compile(r"[>\s]stream(?:\r\n|\n|\r)", re.ASCII)
+        SHIFT_RE = re.compile(r"\b(\d+)(\s+\d+\s+(?:R|obj)\b)", re.ASCII)
+
+        def SplitStream(objStr):
+            m = STREAM_RE.search(objStr)
+            if m:
+                return objStr[:m.start() + 1], objStr[m.start() + 1:]
+            return objStr, ""
+
         def ShiftIDs(text, offset):
             if offset == 0:
                 return text
-            return re.sub(r"\b(\d+)(\s+\d+\s+(?:R|obj)\b)", lambda m: f"{int(m.group(1)) + offset}{m.group(2)}", text)
+            return SHIFT_RE.sub(lambda m: f"{int(m.group(1)) + offset}{m.group(2)}", text)
 
         # Function for Changing the Parent of each OBJ (every /Parent pointing to a removed Pages node)
         def ParentIDChange(PDFstr, OldParentIDs, NewParentID):
-            return re.sub(r"/Parent\s+(\d+)\s+0\s+R", lambda m: f"/Parent {NewParentID} 0 R" if int(m.group(1)) in OldParentIDs else m.group(0), PDFstr)
-
+            return re.sub(r"/Parent\s+(\d+)\s+0\s+R", lambda m: f"/Parent {NewParentID} 0 R" if int(m.group(1)) in OldParentIDs else m.group(0), PDFstr, flags=re.ASCII)
         #makes the new parent object
         def Make_Parent(newKids, NewParentID):
             #forms the new kids string
@@ -148,23 +154,25 @@ def MergePDFFunc(*pdfs):
 
                 parts = []
                 for objID, objData in XrefTable.items():
-                    if objData.get("type") == "n" and objData.get("offset") > 0 and objID not in RemoveIDS:
+                    if objData.get("type") in ("n", "compressedInsideStream") and objData.get("offset") > 0 and objID not in RemoveIDS:
                         NewObj = GetObjectBytes(PDF, XrefTable, objID, DecompressedObjs)
-                        NewObj = NewObj.decode('latin1')
-                        if re.search(r"/Type\s*/XRef|/Linearized", NewObj[:400]):      # old linearization / xref stream objects are useless now
+                        NewObj = NewObj.decode('latin1').rstrip()
+                        if NewObj.endswith("endobj"):       # objects out of object streams already carry one
+                            NewObj = NewObj[:-6]
+                        if re.search(r"/Type\s*/XRef|/Type\s*/ObjStm|/Linearized", NewObj[:400]):      # old linearization / xref stream objects are useless now
                             continue
-                        parts.append(f"\n{NewObj} \nendobj\n")
+                        head, tail = SplitStream(NewObj)
+                        parts.append(("\n" + head, tail + " \nendobj\n"))
 
-            body = ShiftIDs("".join(parts), idOffset)
+            objs = [(ShiftIDs(h, idOffset), t) for h, t in parts]
             allKids += [int(k) + idOffset for k in Pages]
-            bodies.append((body, {i + idOffset for i in RemoveIDS}))
+            bodies.append((objs, {i + idOffset for i in RemoveIDS}))
             idOffset += highestID
 
         '''###### MAKING & INITIALIZING THE NEW PARENT & CATALOG OBJECT ######'''
         NewParentID = idOffset + 1
         parentObj = Make_Parent(allKids, NewParentID)
-        combinedBodies = "".join(ParentIDChange(b, p, NewParentID) for b, p in bodies)
-        #making new catalog
+        combinedBodies = "".join(ParentIDChange(h, p, NewParentID) + t for objs, p in bodies for h, t in objs)        #making new catalog
         catalogObj = f'\n{NewParentID+1} 0 obj\n<</Type/Catalog/Pages {NewParentID} 0 R\n>>\nendobj'      
 
         #making new header
@@ -192,9 +200,6 @@ def MergePDFFunc(*pdfs):
             file.write(encodedPDF)
 
         return f"AppOutputs\\{PDFName}-Merged.pdf"
-    except:
-        print('Error')
-
-
-#Merge_PDF(pdf3, pdf4)
-#Merge_PDF("Inputs/9709_w24_qp_11.pdf", "Inputs/emaar2.pdf", "Inputs/file-example_PDF_500_kB.pdf", "Inputs/file-example_PDF_500_kB.pdf")
+    except Exception as e:
+        print(e)
+        raise
