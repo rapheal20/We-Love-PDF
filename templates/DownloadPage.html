@@ -6,15 +6,13 @@
     <title>Download</title>
 </head>
 <body>    
-    <div style="position: relative; min-height: 100vh; font-family: sans-serif; background-color: #f8f9fa; padding: 40px; box-sizing: border-box;">
-        <h2 align="center">PDFs have been processed!</h2>
-
-        <div style="padding: 80px 20px; background: #f8f9fa; text-align: center; cursor: pointer; transition: border-color 0.2s;">
-            <button type="button" id="downloadBtn" style="background: #e5322d; color: white; border: none; padding: 12px 30px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer;">
-                Download {{ outputType }}
-            </button>
-        </div>
-
+    <div style="padding: 80px 20px; background: #f8f9fa; text-align: center;">
+        <h2>Your PDF/PDFs have been processed!!</h2>
+        {% for f in outputFiles %}
+            <a href="{{ url_for('download', filename=f) }}" style="display: inline-block; background: #e5322d; color: white; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold; border-radius: 6px;">
+                Download {{ outputType }} {% if outputFiles|length > 1 %} (Part {{ loop.index }}){% endif %}
+            </a>
+        {% endfor %}
     </div>
 </body>
 </html>

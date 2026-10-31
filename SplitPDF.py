@@ -5,7 +5,7 @@ from helperfunctions import *
 import re
 import zlib
 
-def SplitPDF(PDFPath, splitPage):
+def SplitPDFFunc(PDFPath, splitPage):
     try:
         PDF = open(PDFPath, "rb")
 
@@ -390,12 +390,14 @@ def SplitPDF(PDFPath, splitPage):
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
 
-        ExportPDFPart(part1Pages, f"Outputs/{PDFName}_Part1.pdf")
-        ExportPDFPart(part2Pages, f"Outputs/{PDFName}_Part2.pdf")
+        ExportPDFPart(part1Pages, f"AppOutputs/{PDFName}_Part1.pdf")
+        ExportPDFPart(part2Pages, f"AppOutputs/{PDFName}_Part2.pdf")
 
         PDF.close()
+
+        return [f"AppOutputs/{PDFName}_Part1.pdf", f"AppOutputs/{PDFName}_Part2.pdf"]
     except:
         print("Error")  
         
 
-SplitPDF("Inputs/sample-local-pdf.pdf", 2)
+#SplitPDF("Inputs/sample-local-pdf.pdf", 2)
