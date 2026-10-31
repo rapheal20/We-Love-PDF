@@ -30,39 +30,8 @@ pdf4 = "Inputs\\file-example_PDF_500_kB.pdf"
 # pdf3 = "Inputs\\emaar1.pdf"
 # pdf4 = "Inputs\\emaar.pdf"
 
-def Merge_PDF(pdf1, pdf2):
+def MergePDFFunc(*pdfs):
     try:
-        #rb mode is for read only in binary mode
-        PDF1 = open(pdf1, "rb")
-        PDF2 = open(pdf2, "rb")
-
-        pdf1Data = PDF1.read()
-        pdf2Data = PDF2.read()
-
-        #this converts the raw binary into string charaters but it maintains the character ratio so the calculated offset will be correct
-        pdf1String = pdf1Data.decode("latin1") 
-        pdf2String = pdf2Data.decode("latin1")
-
-        # calls helper function which returns the xref table
-        xref1, add1 = XrefTableFunc(pdf1)
-        xref2, add2 = XrefTableFunc(pdf2)
-
-        DecompressedObjs1 = {}
-        DecompressedObjs2 = {}
-
-        if isinstance(xref1, tuple):
-            XrefTable1, add = xref1
-        else:
-            XrefTable1 = xref1
-
-        if isinstance(xref2, tuple):
-            XrefTable2, add = xref2
-        else:
-            XrefTable2 = xref2
-
-        Root1 = RootObjectIDFunc(pdf1)
-        Root2 = RootObjectIDFunc(pdf2)
-
         def FindParentsandKids(PDF, XrefTable, RootID, PDF_Data, DecompressedObjs):
             IDS_to_Remove = [RootID]
             ParentRefOffset = XrefTable[RootID]['offset']
@@ -95,80 +64,42 @@ def Merge_PDF(pdf1, pdf2):
 
             # if the extracted kids donot match with the count, then if means PDF has subParents, so then it goes to each subparent and and extracts its kids
             if int(PageCount) != (len(Kids_List)): 
-                KidPages = []
-                for kidID in Kids_List:
-                    IDS_to_Remove.append(kidID)
-                    KidObj = GetObjectBytes(PDF1, XrefTable1, kidID, DecompressedObjs)
-                    KidObj = KidObj.decode('latin1')
+                def ExpandKids(KidIDs):
+                    KidPages = []
+                    for kidID in KidIDs:
+                        KidObj = GetObjectBytes(PDF, XrefTable, kidID, DecompressedObjs)
+                        KidObj = KidObj.decode('latin1')
 
-                    KidStart = (re.search(r"/\s*Kids", KidObj, flags=re.IGNORECASE)).start()
-                    KidEnd = (re.search("]", KidObj[KidStart:], flags=re.IGNORECASE)).end() + KidStart                       
-                    SubKids = re.finditer(KidsFindString, KidObj[KidStart:KidEnd], flags=re.IGNORECASE)
-                    for SubKid in SubKids:
-                        KidPages.append(int(SubKid.group(1)))
+                        KidMatch = re.search(r"/\s*Kids", KidObj, flags=re.IGNORECASE)
+                        if KidMatch is None:            # not a sub-parent, it's a page itself
+                            KidPages.append(kidID)
+                            continue
+                        IDS_to_Remove.append(kidID)
 
+                        KidStart = KidMatch.start()
+                        KidEnd = (re.search("]", KidObj[KidStart:], flags=re.IGNORECASE)).end() + KidStart                       
+                        SubKids = re.finditer(KidsFindString, KidObj[KidStart:KidEnd], flags=re.IGNORECASE)
+                        # a sub-parent can hold more sub-parents, so it calls itself
+                        KidPages += ExpandKids([int(SubKid.group(1)) for SubKid in SubKids])
+                    return KidPages
+                KidPages = ExpandKids(Kids_List)
+                
                 # replaces the subParents with the new pages list
                 Kids_List = KidPages
             return Kids_List, IDS_to_Remove, ParentID
-      
-        PDF1_Pages_List, RemoveIDS1, PDF1_Parent = FindParentsandKids(PDF1, XrefTable1, Root1, pdf1String, DecompressedObjs1)
-        PDF2_Pages_List, RemoveIDS2, PDF2_Parent = FindParentsandKids(PDF2, XrefTable2, Root2, pdf2String, DecompressedObjs2)
-   
-        #Finds the highest object ID of PDF 1
-        Pdf1_highestID = max(XrefTable1.keys()) if XrefTable1 else 0
-        Pdf2_highestID = max(XrefTable2.keys()) if XrefTable1 else 0
 
-        #this addes the Highest ID of PDF 1 into all the object ids of PDF 2 to avoid any repetition
-        def ObjectExtraction(pdfDataStr, xreftab, idOffset=0):
-            ObjectList =[]
-            for objID, objData in xreftab.items():
-                if objData.get("type") == "n" and objData.get("offset") > 0:
-                    offset = objData['offset']
-                    ObjEnd = (re.search(objectEndString, pdfDataStr[offset:], flags=re.IGNORECASE)).start() + offset
-                    newID = objID + idOffset
-                    ObjectList.append({
-                        "OriginalID" : int(objID),
-                        "NewID" : int(newID),
-                        "Content" : pdfDataStr[offset:ObjEnd]
-                        })
-            return ObjectList
+        # shifts every "N G R" reference and "N G obj" header by offset in ONE pass (no double renumbering)
+        def ShiftIDs(text, offset):
+            if offset == 0:
+                return text
+            return re.sub(r"\b(\d+)(\s+\d+\s+(?:R|obj)\b)", lambda m: f"{int(m.group(1)) + offset}{m.group(2)}", text)
 
-        PDF1_Data = ObjectExtraction(pdf1String, XrefTable1)
-        PDF2_Data = ObjectExtraction(pdf2String, XrefTable2, idOffset=Pdf1_highestID)
-
-
-        '''###### CLEANING THE PDF FILES (REMOVES /PARENT & /CATALOG) ######'''
-        body1Str = ""
-        for obj1 in (PDF1_Data):
-            if obj1["OriginalID"] not in RemoveIDS1:
-                NewObj = GetObjectBytes(PDF1, XrefTable1, obj1["OriginalID"], DecompressedObjs1)
-                NewObj = NewObj.decode('latin1')
-                NewObj = f"\n{NewObj} \nendobj\n"
-                body1Str += (NewObj)
-
-        body2Str = ""
-        for obj2 in (PDF2_Data):
-            if obj2["OriginalID"] not in RemoveIDS2:
-                NewObj = GetObjectBytes(PDF2, XrefTable2, obj2["OriginalID"], DecompressedObjs2)
-                NewObj = NewObj.decode('latin1')
-                NewObj = f"\n{NewObj} \nendobj\n"
-                body2Str += (NewObj)
-
-        # Function for Changing the Parent of each OBJ
-        def ParentIDChange(PDFstr, OldParentID, NewParentID):
-            newParentStr = (f"/Parent {NewParentID} 0 R")
-            oldParentStr = (f"/Parent {OldParentID} 0 R")
-            PDFstr = PDFstr.replace(oldParentStr, newParentStr)
-            return PDFstr
+        # Function for Changing the Parent of each OBJ (every /Parent pointing to a removed Pages node)
+        def ParentIDChange(PDFstr, OldParentIDs, NewParentID):
+            return re.sub(r"/Parent\s+(\d+)\s+0\s+R", lambda m: f"/Parent {NewParentID} 0 R" if int(m.group(1)) in OldParentIDs else m.group(0), PDFstr)
 
         #makes the new parent object
-        def Make_Parent(PDF1_Kids, PDF2_Kids, NewParentID, IncrementID):
-            #stores the PDF1 kids in a new list
-            newKids = PDF1_Kids
-            #iterates throught the kids of PDF 2 and appends each into the new list, increments alongside
-            for kid in PDF2_Kids:
-                newKids.append(int(kid) + IncrementID)
-
+        def Make_Parent(newKids, NewParentID):
             #forms the new kids string
             kidsStr = "/Kids[ "
             # iterates through the new kids and corrects the format
@@ -182,21 +113,65 @@ def Merge_PDF(pdf1, pdf2):
 
             return newParent
 
-        body2Str = PDF_ID_Remap(PDF2_Data ,body2Str , "OriginalID")
+        bodies = []         # (body string, removed Pages ids after shifting) for each pdf
+        allKids = []        # page ids of all pdfs in order
+        idOffset = 0        # running total of the highest IDs of the previous pdfs
+        firstString = None
+
+        for path in pdfs:
+            with open(path, "rb") as PDF:
+                pdfString = PDF.read().decode("latin1")
+                if firstString is None:
+                    firstString = pdfString
+
+                xref, add = XrefTableFunc(path)
+                if isinstance(xref, tuple):
+                    XrefTable, add = xref
+                else:
+                    XrefTable = xref
+
+                # repairs the xref table (linearized pdfs): adds the objects it missed, fixes offsets which do not point to their object
+                for found in re.finditer(r"\b(\d+)\s+\d+\s+obj\b", pdfString):
+                    foundID = int(found.group(1))
+                    entry = XrefTable.get(foundID)
+                    if entry is None:
+                        XrefTable[foundID] = {"type": "n", "offset": found.start()}
+                    elif entry.get("type") == "n" and entry.get("offset", 0) > 0:
+                        atOffset = re.match(r"\s*(\d+)\s+\d+\s+obj\b", pdfString[entry["offset"]:entry["offset"] + 30])
+                        if atOffset is None or int(atOffset.group(1)) != foundID:
+                            entry["offset"] = found.start()
+
+                DecompressedObjs = {}
+                Root = RootObjectIDFunc(path)
+                Pages, RemoveIDS, Parent = FindParentsandKids(PDF, XrefTable, Root, pdfString, DecompressedObjs)
+                highestID = max(XrefTable.keys()) if XrefTable else 0
+
+                parts = []
+                for objID, objData in XrefTable.items():
+                    if objData.get("type") == "n" and objData.get("offset") > 0 and objID not in RemoveIDS:
+                        NewObj = GetObjectBytes(PDF, XrefTable, objID, DecompressedObjs)
+                        NewObj = NewObj.decode('latin1')
+                        if re.search(r"/Type\s*/XRef|/Linearized", NewObj[:400]):      # old linearization / xref stream objects are useless now
+                            continue
+                        parts.append(f"\n{NewObj} \nendobj\n")
+
+            body = ShiftIDs("".join(parts), idOffset)
+            allKids += [int(k) + idOffset for k in Pages]
+            bodies.append((body, {i + idOffset for i in RemoveIDS}))
+            idOffset += highestID
 
         '''###### MAKING & INITIALIZING THE NEW PARENT & CATALOG OBJECT ######'''
-        NewParentID = Pdf1_highestID + Pdf2_highestID + 1
-        parentObj = Make_Parent(PDF1_Pages_List, PDF2_Pages_List, NewParentID, Pdf1_highestID)
-        PDF1_Final = ParentIDChange(body1Str, PDF1_Parent, NewParentID)     #Changing PDF1 Parent
-        PDF2_Final = ParentIDChange(body2Str, PDF2_Parent, NewParentID)     #Changing PDF2 Parent
+        NewParentID = idOffset + 1
+        parentObj = Make_Parent(allKids, NewParentID)
+        combinedBodies = "".join(ParentIDChange(b, p, NewParentID) for b, p in bodies)
         #making new catalog
         catalogObj = f'\n{NewParentID+1} 0 obj\n<</Type/Catalog/Pages {NewParentID} 0 R\n>>\nendobj'      
-        
-        #making new header
-        headerObj = Make_Header(pdf1String)
 
-        #forms a string of the new header, pd1, pdf2, parent and catalog object
-        CombinePDFStr = headerObj + PDF1_Final + PDF2_Final + parentObj + catalogObj
+        #making new header
+        headerObj = Make_Header(firstString)
+
+        #forms a string of the new header, all pdfs, parent and catalog object
+        CombinePDFStr = headerObj + combinedBodies + parentObj + catalogObj
 
         #making xref
         xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
@@ -204,7 +179,7 @@ def Merge_PDF(pdf1, pdf2):
         CombinePDFStr += xreftable
 
         #making trailer
-        byteOffset = (re.search("xref", CombinePDFStr, flags=re.IGNORECASE)).start()
+        byteOffset = CombinePDFStr.rindex("xref")
         trailerObj = f"\ntrailer\n<<\n/Size {ObjNumber +1}\n/Root {NewParentID+1} 0 R\n>>\nstartxref\n{byteOffset}\n%%EOF"
 
         CombinePDFStr += trailerObj
@@ -212,15 +187,14 @@ def Merge_PDF(pdf1, pdf2):
         #encoding it back into latin1
         encodedPDF = CombinePDFStr.encode("latin1")
 
-        PDFName = os.path.basename(pdf1).split(".")[0]
-        with open(f"Outputs\\{PDFName}-Merged.pdf" , "wb") as file:
+        PDFName = os.path.basename(pdfs[0]).split(".")[0]
+        with open(f"AppOutputs\\{PDFName}-Merged.pdf" , "wb") as file:
             file.write(encodedPDF)
 
-        PDF1.close
-        PDF2.close
+        return f"AppOutputs\\{PDFName}-Merged.pdf"
     except:
-        print("Error")
+        print('Error')
 
 
-Merge_PDF(pdf3, pdf4)
-
+#Merge_PDF(pdf3, pdf4)
+#Merge_PDF("Inputs/9709_w24_qp_11.pdf", "Inputs/emaar2.pdf", "Inputs/file-example_PDF_500_kB.pdf", "Inputs/file-example_PDF_500_kB.pdf")

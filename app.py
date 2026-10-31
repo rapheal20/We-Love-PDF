@@ -1,8 +1,13 @@
 from flask import *
 from fileinput import filename
 from werkzeug.utils import secure_filename
+import os
+
+from MergePDF import MergePDFFunc
 
 app = Flask(__name__)
+
+FILES_DIRECTORY = os.path.abspath("./AppOutputs")
 
 @app.route('/')
 def index():
@@ -10,16 +15,24 @@ def index():
 
 @app.route('/MergePDF', methods=["GET", "POST"])
 def MergePDF():
-    filename = None
-
     if request.method == "GET":
-        return render_template("MergePDF.html", filename=filename)
+        return render_template("MergePDF.html")
     elif request.method == "POST":
-        f = request.files['file']
-        filename = secure_filename(f.filename)
-        f.save(filename)
-        return render_template("MergePDF.html", filename=filename)
+        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
 
+        files = request.files.getlist("files")
+        savedPaths = []
+
+        for file in files:
+            filename = secure_filename(file.filename)
+            fullPath = os.path.join(path, filename)
+            file.save(fullPath)
+            savedPaths.append(fullPath)
+
+        outputPath = MergePDFFunc(*savedPaths)
+                
+        outputType = "merged PDF"
+        return render_template("DownloadPage.html", outputType=outputType)
 
 @app.route('/SplitPDF', methods=["GET", "POST"])
 def SplitPDF():
