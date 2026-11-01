@@ -10,7 +10,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor; import unicodedata; from docx.opc.constants import RELATIONSHIP_TYPE as RT; from docx.oxml import OxmlElement; from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-def PDFToWord(PDFPath):
+def PDFToWordFunc(PDFPath):
     try:
         extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
         #replay the PDF text operators so every piece of text knows its x, y, size and style
@@ -266,11 +266,13 @@ def PDFToWord(PDFPath):
 
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
-        outputPath = f"Outputs/{PDFName}.docx"
+        outputPath = f"AppOutputs/{PDFName}.docx"
 
         os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
         doc.save(outputPath)
-    except:
-        print("Error")
+        return [f"AppOutputs/{PDFName}.docx"]
+    
+    except Exception as e:
+        print(e)
 
-PDFToWord("Inputs/file-example_PDF_500_kB.pdf")
+#PDFToWord("Inputs/file-example_PDF_500_kB.pdf")

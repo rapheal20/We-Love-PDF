@@ -13,7 +13,7 @@ from CommonFunctionsForDocs import *
 
 pdf1 = "Inputs\\emaar1.pdf"
 
-def PDFToPowerPoint(PDFPath):
+def PDFToPowerPointFunc(PDFPath):
     try:
         extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
 
@@ -162,11 +162,16 @@ def PDFToPowerPoint(PDFPath):
                     addPPTXRun(para, text, base, size, color)
 
             PDFName = os.path.basename(PDFPath).split(".")[0]
-            outputPath = f"Outputs/{PDFName}.pptx"
+            outputPath = f"AppOutputs/{PDFName}.pptx"
             prs.save(outputPath)
             
         PPTXBuilder(extractedElements, firstBox, PDFPath)
-    except:
-        print("Error")
+
+        PDFName = os.path.basename(PDFPath).split(".")[0]
+        outputPath = f"AppOutputs/{PDFName}.pptx"
+        return [outputPath]
+  
+    except Exception as e:
+        print(e)
         
-PDFToPowerPoint(pdf1)
+#PDFToPowerPoint(pdf1)

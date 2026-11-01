@@ -9,7 +9,7 @@ The features implemented will be:
 3. Compress PDF (Done by Rapheal)
 4. PDF to Word (Done by Anael)
 5. PDF to PowerPoint (Done by Rapheal)
-6. PDF to Excel
+6. PDF to Excel (Done by Rapheal)
 7. Word to PDF 
 8. PowerPoint to PDF
 9. Excel to PDF
@@ -17,17 +17,17 @@ The features implemented will be:
 11. PDF to JPG (work in progres by Rapheal)
 12. JPG to PDF 
 13. Sign PDF 
-14. Watermark 
+14. Watermark (Done by Rapheal)
 15. Rotate PDF 
 16. HTML to PDF 
 17. Unlock PDF 
 18. Protect PDF 
-19. Organize PDF 
+19. Organize PDF (Done by Rapheal)
 20. PDF to PDF/A
 21. Repair PDF 
-22. Page numbers
+22. Page numbers (Done by Rapheal)
 22. Scan to PDF 
-23. OCR PDF 
+23. OCR PDF (Done by Rapheal)
 24. Compare PDF 
 25. Redact PDF 
 26. Crop PDF 

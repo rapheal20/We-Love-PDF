@@ -5,6 +5,8 @@ import os
 from MergePDF import MergePDFFunc
 from SplitPDF import SplitPDFFunc
 from CompressPDF import PDFCompressFunc
+from PDFToWord import PDFToWordFunc
+from PDFToPowerPoint import PDFToPowerPointFunc
 
 app = Flask(__name__)
 
@@ -31,10 +33,10 @@ def MergePDF():
             file.save(fullPath)
             savedPaths.append(fullPath)
 
-        outputPath = MergePDFFunc(*savedPaths)
+        outputPaths = MergePDFFunc(*savedPaths)
                 
         outputType = "merged PDF"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(outputPath)])
+        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route('/SplitPDF', methods=["GET", "POST"])
 def SplitPDF():
@@ -81,11 +83,42 @@ def CompressPDF():
 
 @app.route('/PDFToWord', methods=["GET", "POST"])
 def PDFToWord():
-    return render_template("PDFToWord.html")
+    if request.method == "GET":
+        return render_template("PDFToWord.html")
+
+    elif request.method == "POST":
+        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+
+        file = request.files["files"]
+        
+        filename = secure_filename(file.filename)
+        fullPath = os.path.join(path, filename)
+        file.save(fullPath)
+
+        outputPaths = PDFToWordFunc(fullPath)
+
+        outputType = ".docx file"
+        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route('/PDFToPowerPoint', methods=["GET", "POST"])
 def PDFToPowerPoint():
-    return render_template("PDFToPowerPoint.html")
+    if request.method == "GET":
+        return render_template("PDFToPowerPoint.html")
+
+    elif request.method == "POST":
+        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+
+        file = request.files["files"]
+        
+        filename = secure_filename(file.filename)
+        fullPath = os.path.join(path, filename)
+        file.save(fullPath)
+
+        outputPaths = PDFToPowerPointFunc(fullPath)
+        print(f"OUTPUTTTT: {outputPaths}")
+
+        outputType = ".pptx file"
+        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route("/WorkInProgress")
 def WorkInProgress():

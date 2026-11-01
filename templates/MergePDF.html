@@ -14,7 +14,7 @@
 
         <form id="uploadForm" action="/MergePDF" method="POST" enctype="multipart/form-data">
             
-            <input type="file" id="fileInput" name="files" multiple style="display: none;">
+            <input type="file" id="fileInput" name="files" accept="application/pdf" multiple style="display: none;">
 
             <div id="dropzone" style="border: 3px dashed #ccc; border-radius: 12px; padding: 80px 20px; background: #ffffff; text-align: center; cursor: pointer; transition: border-color 0.2s;">
                 <p style="font-size: 48px; margin: 0 0 10px 0; color: #ff4d4d;">📁</p>
@@ -60,6 +60,7 @@
         const fileCountBadge = document.getElementById('fileCountBadge');
 
         let selectedFiles = [];
+        let draggedItemIndex = null;
 
         dropzone.addEventListener('click', () => fileInput.click());
         browseBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
@@ -90,28 +91,40 @@
             handleFiles(e.dataTransfer.files);
         });
 
+        function updateFileInput(){
+            const dataTransfer = new DataTransfer();
+            selectedFiles.forEach(file => dataTransfer.items.add(file)); // Fixed: changed 'item' to 'items'
+            fileInput.files = dataTransfer.files;
+            fileCountBadge.textContent = selectedFiles.length; 
+
+            if (selectedFiles.length === 0){
+                workspace.style.display = 'none';
+                dropzone.style.display = 'block';
+            }
+        }
+
         function handleFiles(files) {
             if (files.length === 0) return;
 
             selectedFiles = selectedFiles.concat(Array.from(files));
-
-            const dataTransfer = new DataTransfer();
-            selectedFiles.forEach(file => dataTransfer.items.add(file));
-            
-            fileInput.files = dataTransfer.files;
+            updateFileInput();
 
             dropzone.style.display = 'none';
             workspace.style.display = 'block';
 
-            fileCountBadge.textContent = selectedFiles.length;
+            renderPreviews();
+        }
 
+        function removeFile(index){
+            selectedFiles.splice(index, 1);
+            updateFileInput();
             renderPreviews();
         }
 
         function renderPreviews() {
             previewGrid.innerHTML = '';
 
-            selectedFiles.forEach((file) => {
+            selectedFiles.forEach((file, index) => { // Added index parameter here
                 const card = document.createElement('div');
                 card.style.background = 'white';
                 card.style.border = '1px solid #e0e0e0';
@@ -122,6 +135,39 @@
                 card.style.display = 'flex';
                 card.style.flexDirection = 'column';
                 card.style.alignItems = 'center';
+                card.style.position = 'relative';
+                card.style.cursor = 'grab';
+                card.style.userSelect = 'none';
+                card.draggable = true;
+
+                const removeBtn = document.createElement('button');
+                removeBtn.type = 'button';
+                removeBtn.innerHTML = '&times;';
+                removeBtn.title = 'Remove file';
+                removeBtn.style.position = 'absolute';
+                removeBtn.style.top = '6px';
+                removeBtn.style.right = '6px';
+                removeBtn.style.background = '#ff4d4d';
+                removeBtn.style.color = 'white';
+                removeBtn.style.border = 'none';
+                removeBtn.style.borderRadius = '50%';
+                removeBtn.style.width = '24px';
+                removeBtn.style.height = '24px';
+                removeBtn.style.fontSize = '14px';
+                removeBtn.style.fontWeight = 'bold';
+                removeBtn.style.cursor = 'pointer';
+                removeBtn.style.display = 'flex';
+                removeBtn.style.alignItems = 'center';
+                removeBtn.style.justifyContent = 'center';
+                removeBtn.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                removeBtn.style.zIndex = '10';
+
+                removeBtn.addEventListener('mouseenter', () => removeBtn.style.background = '#cc0000');
+                removeBtn.addEventListener('mouseleave', () => removeBtn.style.background = '#ff4d4d');
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeFile(index);
+                });
 
                 const thumbnail = document.createElement('div');
                 thumbnail.style.width = '100%';
@@ -134,6 +180,7 @@
                 thumbnail.style.justifyContent = 'center';
                 thumbnail.style.marginBottom = '12px';
                 thumbnail.style.overflow = 'hidden';
+                thumbnail.style.pointerEvents = 'none';
                 
                 const canvas = document.createElement('canvas');
                 canvas.style.maxWidth = '100%';
@@ -156,12 +203,43 @@
                 nameLabel.style.overflow = 'hidden';
                 nameLabel.style.textOverflow = 'ellipsis';
                 nameLabel.style.textAlign = 'center';
+                nameLabel.style.pointerEvents = 'none';
                 nameLabel.textContent = file.name;
 
+                // Append everything properly to the card
+                card.appendChild(removeBtn);
                 card.appendChild(thumbnail);
                 card.appendChild(nameLabel);
-                previewGrid.appendChild(card);
                 
+                card.addEventListener('dragstart', (e) => {
+                    draggedItemIndex = index;
+                    card.style.opacity = '0.4';
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+
+                card.addEventListener('dragend', () => {
+                    card.style.opacity = '1';
+                    draggedItemIndex = null;
+                });
+
+                card.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+
+                card.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (draggedItemIndex === null || draggedItemIndex === index) return;
+
+                    const movedFile = selectedFiles.splice(draggedItemIndex, 1)[0];
+                    selectedFiles.splice(index, 0, movedFile);
+
+                    updateFileInput();
+                    renderPreviews();
+                });
+
+                previewGrid.appendChild(card);
+
                 if (file.type === 'application/pdf') {
                     const fileReader = new FileReader();
                     
