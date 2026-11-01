@@ -81,6 +81,7 @@ To run this project on your local machine, follow these steps:
 ---
 ## AI Usage
 AI was used for:
+
     * Debugging errors.
     * Research purposes (as an alternative to Google Search).
     * Snippets of code of completely new concepts.

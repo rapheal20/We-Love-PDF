@@ -4,7 +4,7 @@ import os
 from io import BytesIO
 from PIL import Image
 from helperfunctions import *
-
+import tempfile
 
 '''
 MAIN DATA STRUCTURE
@@ -257,12 +257,16 @@ def PDFCompressFunc(pdf_file):
         CombinePDFStr += "\n\n" + trailerObj #concatinates the new trailer
 
         encodedPDF = CombinePDFStr.encode("latin1") # encodes the pdf string back to latin1
-
+        
+        TEMP_DIR = tempfile.gettempdir()
         PDFName = os.path.basename(pdf_file).split(".")[0]
-        with open(f"AppOutputs\\{PDFName}-Compressed.pdf" , "wb") as file:
+        output_filename = f"{PDFName}-Compressed.pdf"
+        output_path = os.path.join(TEMP_DIR, output_filename)
+
+        with open(output_path, "wb") as file:
             file.write(encodedPDF)
 
-        return [f"AppOutputs\\{PDFName}-Compressed.pdf"]
+        return [output_path]
     except Exception as e:
         print(e)
 

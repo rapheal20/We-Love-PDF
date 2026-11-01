@@ -135,4 +135,7 @@ def WorkInProgress():
 
 @app.route('/download/<filename>')
 def download(filename):
-    return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
+    try:
+        return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
+    except FileNotFoundError:
+        return "The processed file has expired or was cleared from temporary storage. Please try processing it again.", 404
