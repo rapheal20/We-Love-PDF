@@ -592,6 +592,17 @@
             handleFiles(e.dataTransfer.files);
         });
 
+        function updateFileInput(){
+            const dataTransfer = new DataTransfer();
+            selectedFiles.forEach(file => dataTransfer.items.add(file));
+            fileInput.files = dataTransfer.files;
+
+            if (selectedFiles.length === 0){
+                workspace.style.display = 'none';
+                dropzone.style.display = 'block';
+            }
+        }
+
         function handleFiles(files) {
             if (files.length === 0) return;
 
