@@ -3,16 +3,604 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Download</title>
+    <title>Download Processed PDF - We Love PDF</title>
+
+    <style>
+        @font-face {
+            font-family: 'Graphik-regular';
+            src: url('/static/Graphik-Regular.otf') format('opentype');
+            font-weight: 400;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Graphik-semibold';
+            src: url('/static/Graphik-Semi-Bold.otf') format('opentype');
+            font-weight: 600;
+            font-style: normal;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Graphik-medium';
+            src: url('/static/Graphik-Medium.otf') format('opentype');
+            font-weight: 500;
+            font-style: normal;
+            font-display: swap;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Graphik-regular', sans-serif;
+        }
+
+        .bodySection1 {
+            background-image: url('/static/background2.svg');
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: cover;
+            padding-bottom: 60px;
+            min-height: 100dvh;
+            margin-top: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .bodyHolder {
+            padding: 0 24px;
+            margin: 0;
+            max-width: 1100px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .mainTitle {
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-semibold';
+            font-size: 42px;
+            text-align: center;
+            max-width: 1100px;
+            line-height: 52px;
+            color: #26030a;
+            margin: 30px 0 12px 0;
+        }
+
+        .mainSubtitle {
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-regular';
+            font-size: 20px;
+            text-align: center;
+            max-width: 1100px;
+            color: #8a235b;
+            margin-bottom: 32px;
+        }
+
+        .downloadCard {
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 16px;
+            padding: 60px 40px;
+            background-color: rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            text-align: center;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            width: 100%;
+            max-width: 600px;
+            box-sizing: border-box;
+        }
+
+        .downloadBtn {
+            display: inline-block;
+            background-color: #f10291;
+            color: #fff4f2;
+            text-decoration: none;
+            padding: 16px 36px;
+            font-size: 18px;
+            font-family: 'Graphik-semibold';
+            border-radius: 16px;
+            transition: all 0.2s ease;
+            box-shadow: 0 5px 15px rgba(241, 2, 145, 0.4);
+        }
+
+        .headerHolder {
+            height: 60px;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+            background-color: white;
+            box-shadow: 1px 1px 1px 1px rgba(0, 0, 0, 0.1);
+            padding: 0px 24px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            box-sizing: border-box;
+        }
+
+        .headerSegment {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .siteLogo {
+            height: 30px;
+            align-self: center;
+        }
+
+        .headerButton, .headerButtonAllTime {
+            padding: 0;
+            margin: 0;
+            font-family: 'Graphik-regular';
+            letter-spacing: 0.3px;
+            font-weight: 500;
+            font-size: 12px;
+            text-align: center;
+            background-color: transparent;
+            border: none;
+            color: #26030a;
+            cursor: pointer;
+        }
+
+        .dropMenu, .dropMenuConvert {
+            background-color: white;
+            font-family: 'Graphik-regular';
+            padding: 24px;
+            width: 80%;
+            max-width: 900px;
+            box-shadow: 0px 0px 1px 1px rgba(0, 0, 0, 0.1);
+            border-radius: 16px;
+            margin-top: 5px;
+            z-index: 1000;
+            visibility: hidden;
+            position: fixed;
+            top: 65px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .dropShow {
+            visibility: visible;
+        }
+
+        .menuRows {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            row-gap: 24px;
+            column-gap: 8px;
+        }
+
+        .menuColHolder, .menuCol {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .menuFeature {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            padding: 8px;
+            gap: 8px;
+        }
+
+        .menuFeature:hover {
+            background-color: #d6d6df;
+            border-radius: 4px;
+        }
+
+        .menutitle {
+            margin: 0;
+            padding: 0;
+            color: #26030a;
+            font-size: 13px;
+        }
+
+        .menuHeading {
+            font-size: 14px;
+            text-align: left;
+            color: #8a235b;
+            margin: 0 0 7px 0;
+        }
+
+        .headerButtonHolder, .headerButtonHolderConvert {
+            position: relative;
+        }
+
+        .headerButtonHolder::after, .headerButtonHolderConvert::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            background: transparent;
+        }
+
+        /* Footer */
+        .FooterDiv {
+            background-color: #8a235b;
+            margin: 0;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .FooterLeft {
+            color: #fff4f2;
+            font-family: 'Graphik-regular';
+            font-size: 12px;
+            text-align: left;
+        }
+
+        .FooterRight {
+            text-align: right;
+            font-size: 10px;
+            color: #fff4f2;
+            font-family: 'Graphik-regular';
+        }
+
+        .footertext {
+            margin: 0;
+        }
+
+        @media (max-width:640px){
+            .headerButton { display: none; }
+            .mainTitle { font-size: 30px; line-height: 36px; }
+            .mainSubtitle { font-size: 16px; }
+            .downloadCard { padding: 40px 20px; }
+        }
+    </style>
 </head>
-<body>    
-    <div style="padding: 80px 20px; background: #f8f9fa; text-align: center;">
-        <h2>Your PDF/PDFs have been processed!!</h2>
-        {% for f in outputFiles %}
-            <a href="{{ url_for('download', filename=f) }}" style="display: inline-block; background: #e5322d; color: white; text-decoration: none; padding: 12px 30px; font-size: 16px; font-weight: bold; border-radius: 6px;">
-                Download {{ outputType }} {% if outputFiles|length > 1 %} (Part {{ loop.index }}){% endif %}
+<body>
+    <header>
+        <div class="headerHolder">
+            <a href="/" style="text-decoration: none;">
+                <img src="/static/Logo.svg" class="siteLogo">
             </a>
-        {% endfor %}
+
+            <div class="headerSegment">
+                <a href="/MergePDF" style="text-decoration: none;"><button class="headerButton">MERGE PDF</button></a>
+                <a href="/SplitPDF" style="text-decoration: none;"><button class="headerButton">SPLIT PDF</button></a>
+                <a href="/CompressPDF" style="text-decoration: none;"><button class="headerButton">COMPRESS PDF</button></a>
+
+                <div class="headerButtonHolderConvert">
+                    <button class="headerButton">CONVERT PDF</button>
+                    <div class="dropMenuConvert">
+                        <div class="menuRows">
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT TO PDF</h4>
+                                <div class="menuCol convertToPDFCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT FROM PDF</h4>
+                                <div class="menuCol convertFromPDFCol"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="headerSegmentRight">
+                <div class="headerButtonHolder">
+                    <button class="headerButtonAllTime">ALL PDF TOOLS ⮷</button>
+                    <div class="dropMenu">
+                        <div class="menuRows">
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">ORGANIZE PDF</h4>
+                                <div class="menuCol organizeCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">OPTIMIZE PDF</h4>
+                                <div class="menuCol optimizeCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT TO PDF</h4>
+                                <div class="menuCol convertToPDFCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">CONVERT FROM PDF</h4>
+                                <div class="menuCol convertFromPDFCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">EDIT PDF</h4>
+                                <div class="menuCol editCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">PDF SECURITY</h4>
+                                <div class="menuCol securityCol"></div>
+                            </div>
+                            <div class="menuColHolder">
+                                <h4 class="menuHeading">PDF INTELLIGENCE</h4>
+                                <div class="menuCol intelligenceCol"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="bodySection1">
+        <div class="bodyHolder">
+            <h1 class="mainTitle">Your files are ready!</h1>
+            <p class="mainSubtitle">Your PDF files have been successfully processed.</p>
+
+            <div>
+                {% for f in outputFiles %}
+                    <a href="{{ url_for('download', filename=f) }}" class="downloadBtn">
+                        Download {{ outputType }} {% if outputFiles|length > 1 %} (Part {{ loop.index }}){% endif %}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
     </div>
+
+    <footer>
+        <div class="FooterDiv">
+            <div class="FooterLeft">
+                <p class="footertext">Made by Rapheal & Anael.</p>
+                <p class="footertext">A project made in Third Space.</p>
+            </div>
+            <div class="FooterRight">
+                <p class="footertext">OUII SHII</p>
+                <p class="footertext">(: (: (: (:</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        const features= [
+            {
+                name: "Merge PDF",
+                description: "Combine PDFs in the order you want.",
+                img: "/static/Merge_PDF.svg",
+                category: "organize", 
+                htmlname: "/MergePDF"
+            },
+            {
+                name: "Split PDF",
+                description: "Split a PDF into two parts at a specific page",
+                img: "/static/Split_PDF.svg",
+                category: "organize",
+                htmlname: "/SplitPDF"
+            },
+            {
+                name: "Compress PDF",
+                description: "Reduce file size while optimizing for maximal PDF quality.",
+                img: "/static/Compress_PDF.svg",
+                category: "optimize", 
+                htmlname: "/CompressPDF"
+            },
+            {
+                name: "PDF to Word",
+                description: "Convert your PDF files into DOCX documents.",
+                img: "/static/PDF_to_Word.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF", 
+                htmlname: "/PDFToWord"
+            },
+            {
+                name: "PDF to PowerPoint",
+                description: "Convert your PDF files into PPTX slideshows.",
+                img: "/static/PDF_to_PowerPoint.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF",
+                htmlname: "/PDFToPowerPoint"
+            },
+            {
+                name: "PDF to Excel",
+                description: "Convert your PDF files into Excel spreadsheets.",
+                img: "/static/PDF_to_Excel.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Word to PDF",
+                description: "Convert your DOCX files to PDFs.",
+                img: "/static/Word_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+                
+            },
+            {
+                name: "PowerPoint to PDF",
+                description: "Convert your PPTX slideshows to PDF.",
+                img: "/static/PowerPoint_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Excel to PDF",
+                description: "Convert your EXCEL spreadsheets to PDF.",
+                img: "/static/Excel_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Edit PDF",
+                description: "Add text, images. shapes or freehand annotations to a PDF document.",
+                img: "/static/Edit_PDF.svg",
+                category: "edit",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "PDF to JPG",
+                description: "Convert each PDF page into a JPG.",
+                img: "/static/PDF_to_JPG.svg",
+                category: "convert",
+                subcatagory: "convertFromPDF",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "JPG to PDF",
+                description: "Convert your JPG images to PDF.",
+                img: "/static/JPG_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Watermark",
+                description: "Text over your PDF. Choose the typography, transparency and position.",
+                img: "/static/Watermark.svg",
+                category: "edit", 
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Rotate PDF",
+                description: "Rotate your PDFs the way you need them.",
+                img: "/static/Rotate_PDF.svg",
+                category: "edit",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Organize PDF",
+                description: "Sort pages of your PDF file however you like.",
+                img: "/static/Organize_PDF.svg",
+                category: "organize",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Page numbers",
+                description: "Add page numbers into your PDFs.",
+                img: "/static/Page_numbers.svg",
+                category: "edit",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "OCR PDF",
+                description: "Convert scanned PDF into searchable and selectable documents.",
+                img: "/static/OCR_PDF.svg",
+                category: "optimize",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "HTML to PDF",
+                description: "Convert webpages in HTML to PDF.",
+                img: "/static/HTML_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+                
+            },
+            {
+                name: "Compare PDF",
+                description: "Show a side-by-side document comparison and easily spot changes between different file versions.",
+                img: "/static/Compare_PDF.svg",
+                category: "security",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Redact PDF",
+                description: "Redact text and graphics to permanently remove sensitive information from a PDF.",
+                img: "/static/Redact_PDF.svg",
+                category: "security",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Crop PDF",
+                description: "Crop margins of your PDF documents.",
+                img: "/static/Crop_PDF.svg",
+                category: "edit",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "AI Summarizer",
+                description: "Quickly generate concise summaries from your PDFs.",
+                img: "/static/AI_Summarizer.svg",
+                category: "intelligence",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "Translate PDF",
+                description: "Easily translate PDF files powered by AI.",
+                img: "/static/Translate_PDF.svg",
+                category: "intelligence",
+                htmlname: "/WorkInProgress"
+            },
+            {
+                name: "PDF to Markdown",
+                description: "Convert your PDFs into Markdown files.",
+                img: "/static/PDF_to_Markdown.svg",
+                category: "intelligence",
+                htmlname: "/WorkInProgress"
+            }
+        ];
+
+        function menuLoader(filter, parentdiv) {
+            let lenghtOFFeatures = features.length;
+            let featuresHtml = "";
+            if (filter){
+                for (let i=0; i < lenghtOFFeatures; i++) {   
+                    if (filter == 'convertToPDF' || filter == 'convertFromPDF'){
+                        if (filter == features[i].subcatagory){
+                            let link = features[i].htmlname || "/WorkInProgress";
+                            featuresHtml+=`
+                                <a href="${link}" class="menuFeature ${features[i].subcatagory}" style="text-decoration: none; color: inherit;"> 
+                                    <img src="${features[i].img}" class="menuImg">  
+                                    <h3 class="menutitle">${features[i].name}</h3>
+                                </a>
+                            `;
+                        }
+                    } else {
+                        if (filter == features[i].category) {
+                            let link = features[i].htmlname || "/WorkInProgress";
+                            featuresHtml+=`
+                                <a href="${link}" class="menuFeature ${features[i].category}" style="text-decoration: none; color: inherit;"> 
+                                    <img src="${features[i].img}" class="menuImg">  
+                                    <h3 class="menutitle">${features[i].name}</h3>
+                                </a>
+                            `;
+                        }        
+                    }
+                }
+            }       
+            const alloption = document.querySelector(`.${parentdiv}`);
+            if(alloption){
+                let targetCol = alloption.querySelector(`.${filter}Col`);
+                if(targetCol) targetCol.innerHTML = featuresHtml;
+            }
+        }
+
+        menuLoader('organize',"dropMenu");
+        menuLoader('optimize', "dropMenu");
+        menuLoader('convertToPDF', "dropMenu");
+        menuLoader('convertFromPDF', "dropMenu");
+        menuLoader('edit', "dropMenu");
+        menuLoader('security', "dropMenu"); 
+        menuLoader('intelligence', "dropMenu");
+        menuLoader('convertToPDF', "dropMenuConvert");
+        menuLoader('convertFromPDF', "dropMenuConvert");
+
+        const menuHeader = document.querySelector('.headerButtonHolder');
+        if(menuHeader){
+            menuHeader.addEventListener('mouseenter', () => document.querySelector('.dropMenu').classList.add('dropShow'));
+            menuHeader.addEventListener('mouseleave', () => document.querySelector('.dropMenu').classList.remove('dropShow'));
+        }
+
+        const menuHeader1 = document.querySelector('.headerButtonHolderConvert');
+        if(menuHeader1){
+            menuHeader1.addEventListener('mouseenter', () => document.querySelector('.dropMenuConvert').classList.add('dropShow'));
+            menuHeader1.addEventListener('mouseleave', () => document.querySelector('.dropMenuConvert').classList.remove('dropShow'));
+        }
+    </script>
 </body>
 </html>

@@ -115,7 +115,6 @@ def PDFToPowerPoint():
         file.save(fullPath)
 
         outputPaths = PDFToPowerPointFunc(fullPath)
-        print(f"OUTPUTTTT: {outputPaths}")
 
         outputType = ".pptx file"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])

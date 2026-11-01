@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-
+    <title>We Love PDF</title>
 
     <style>
         @font-face {
@@ -459,12 +458,17 @@
 <body>
     <header>
         <div class="headerHolder">
-            <img src="/static/Logo.svg" class="siteLogo">
+            <P>
+            <a href="/" style="text-decoration: none;">
+                <img src="/static/Logo.svg" class="siteLogo">
+            </a>
+            </P>
+
 
             <div class="headerSegment">
-                <button class="headerButton">MERGE PDF</button>
-                <button class="headerButton">SPLIT PDF</button>
-                <button class="headerButton">COMPRESS PDF</button>
+                <a href="/MergePDF" style="text-decoration: none;"><button class="headerButton">MERGE PDF</button></a>
+                <a href="/SplitPDF" style="text-decoration: none;"><button class="headerButton">SPLIT PDF</button></a>
+                <a href="/CompressPDF" style="text-decoration: none;"><button class="headerButton">COMPRESS PDF</button></a>
 
                 <div class="headerButtonHolderConvert">
                     <button class="headerButton">CONVERT PDF</button>
@@ -495,10 +499,6 @@
                             <div class="menuColHolder">
                                 <h4 class="menuHeading">ORGANIZE PDF</h4>
                                 <div class="menuCol organizeCol">
-                                    <!-- <div class="menuFeature ${features[i].subcatagory}"> 
-                                        <img src="${features[i].img}" class="menuImg">  
-                                        <h3 class="menutitle">${features[i].name}</h3>
-                                    </div> -->
                                 </div>
                             </div>
                             <div class="menuColHolder">
@@ -514,7 +514,6 @@
                                 </div>
                             </div>
                         
-                        <!-- <div class="menuRows"> -->
                             <div class="menuColHolder">
                                 <h4 class="menuHeading">CONVERT FROM PDF</h4>
                                 <div class="menuCol convertFromPDFCol">
@@ -539,7 +538,6 @@
                                     
                                 </div>
                             </div>
-                        <!-- </div> -->
                             </div>
                     </div>
                 </div>
@@ -551,7 +549,7 @@
     <div class="bodySection1">
         <div class="titleHolder">
             <h1 class="mainTitle">Every tool you need to work with PDFs in one place</h1>
-            <p class="mainSubtitle">Every tool you need to use PDFs, at your fingertips. All are 100% FREE and easy to use! Merge, split, compress, convert, rotate, unlock and watermark PDFs with just a few clicks.</p>
+            <p class="mainSubtitle">All are 100% FREE and easy to use! Merge, split, compress, convert, rotate, and watermark PDFs with just a few clicks!!</p>
         </div>
 
         <div class="bodyHolder">
@@ -586,31 +584,29 @@
     <footer>
         <div class="FooterDiv">
             <div class="FooterLeft">
-                <p class="footertext">Made by Rapheal & Anael</p>
-                <p class="footertext">A project for HackClub</p>
+                <p class="footertext">Made by Rapheal & Anael.</p>
+                <p class="footertext">A project made in Third Space.</p>
             </div>
             <div class="FooterRight">
-                <p class="footertext">Meowwww</p>
+                <p class="footertext">OUII SHII</p>
                 <p class="footertext">(: (: (: (:</p>
             </div>
         </div>
     </footer>
 
 
-    
-
     <script>
         const features= [
             {
                 name: "Merge PDF",
-                description: "Combine PDFs in the order you want with the easiest PDF merger available.",
+                description: "Combine PDFs in the order you want.",
                 img: "/static/Merge_PDF.svg",
                 category: "organize", 
                 htmlname: "/MergePDF"
             },
             {
                 name: "Split PDF",
-                description: "Separate one page or a whole set for easy conversion into independent PDF files.",
+                description: "Split a PDF into two parts at a specific page",
                 img: "/static/Split_PDF.svg",
                 category: "organize",
                 htmlname: "/SplitPDF"
@@ -624,7 +620,7 @@
             },
             {
                 name: "PDF to Word",
-                description: "Easily convert your PDF files into easy to edit DOC and DOCX documents. The converted WORD document is almost 100% accurate.",
+                description: "Convert your PDF files into DOCX documents.",
                 img: "/static/PDF_to_Word.svg",
                 category: "convert",
                 subcatagory: "convertFromPDF", 
@@ -632,7 +628,7 @@
             },
             {
                 name: "PDF to PowerPoint",
-                description: "Turn your PDF files into easy to edit PPT and PPTX slideshows.",
+                description: "Convert your PDF files into PPTX slideshows.",
                 img: "/static/PDF_to_PowerPoint.svg",
                 category: "convert",
                 subcatagory: "convertFromPDF",
@@ -640,7 +636,7 @@
             },
             {
                 name: "PDF to Excel",
-                description: "Pull data straight from PDFs into Excel spreadsheets in a few short seconds.",
+                description: "Convert your PDF files into Excel spreadsheets.",
                 img: "/static/PDF_to_Excel.svg",
                 category: "convert",
                 subcatagory: "convertFromPDF",
@@ -648,7 +644,7 @@
             },
             {
                 name: "Word to PDF",
-                description: "Make DOC and DOCX files easy to read by converting them to PDF.",
+                description: "Convert your DOCX files to PDFs.",
                 img: "/static/Word_to_PDF.svg",
                 category: "convert",
                 subcatagory: "convertToPDF",
@@ -657,7 +653,7 @@
             },
             {
                 name: "PowerPoint to PDF",
-                description: "Make PPT and PPTX slideshows easy to view by converting them to PDF.",
+                description: "Convert your PPTX slideshows to PDF.",
                 img: "/static/PowerPoint_to_PDF.svg",
                 category: "convert",
                 subcatagory: "convertToPDF",
@@ -665,7 +661,7 @@
             },
             {
                 name: "Excel to PDF",
-                description: "Make EXCEL spreadsheets easy to read by converting them to PDF.",
+                description: "Convert your EXCEL spreadsheets to PDF.",
                 img: "/static/Excel_to_PDF.svg",
                 category: "convert",
                 subcatagory: "convertToPDF",
@@ -673,14 +669,14 @@
             },
             {
                 name: "Edit PDF",
-                description: "Add text, images. shapes or freehand annotations to a PDF document. Edit the size, font, and color of the added content.",
+                description: "Add text, images. shapes or freehand annotations to a PDF document.",
                 img: "/static/Edit_PDF.svg",
                 category: "edit",
                 htmlname: "/WorkInProgress"
             },
             {
                 name: "PDF to JPG",
-                description: "Convert each PDF page into a JPG or extract all images contained in a PDF.",
+                description: "Convert each PDF page into a JPG.",
                 img: "/static/PDF_to_JPG.svg",
                 category: "convert",
                 subcatagory: "convertFromPDF",
@@ -688,98 +684,55 @@
             },
             {
                 name: "JPG to PDF",
-                description: "Convert JPG images to PDF in seconds. Easily adjust orientation and margins.",
+                description: "Convert your JPG images to PDF.",
                 img: "/static/JPG_to_PDF.svg",
                 category: "convert",
                 subcatagory: "convertToPDF",
                 htmlname: "/WorkInProgress"
             },
             {
-                name: "Sign PDF",
-                description: "Sign yourself or request electronic signatures from others.",
-                img: "/static/Sign_PDF.svg",
-                category: "security",
-                htmlname: "/WorkInProgress"
-            },
-            {
                 name: "Watermark",
-                description: "Stamp an image or text over your PDF in seconds, Choose the typography, transparency and position.",
+                description: "Text over your PDF. Choose the typography, transparency and position.",
                 img: "/static/Watermark.svg",
                 category: "edit", 
                 htmlname: "/WorkInProgress"
             },
             {
                 name: "Rotate PDF",
-                description: "Rotate your PDFs the way you need them. You can even rotate multiple PDFs at once!",
+                description: "Rotate your PDFs the way you need them.",
                 img: "/static/Rotate_PDF.svg",
                 category: "edit",
                 htmlname: "/WorkInProgress"
             },
             {
-                name: "HTML to PDF",
-                description: "Convert webpages in HTML to PDF. Copy and paste the LJRL of the page you want and convert it to PDF with a click.",
-                img: "/static/HTML_to_PDF.svg",
-                category: "convert",
-                subcatagory: "convertToPDF",
-                htmlname: "/WorkInProgress"
-                
-            },
-            {
-                name: "Unlock PDF",
-                description: "Remove PDF password security, giving you the freedom to use your PDFs as you want.",
-                img: "/static/Unlock_PDF.svg",
-                category: "security",
-                htmlname: "/WorkInProgress"
-            },
-            {
-                name: "Protect PDF",
-                description: "Protect PDF files with a password. Encrypt PDF documents to prevent unauthorized access.",
-                img: "/static/Protect_PDF.svg",
-                category: "security",
-                htmlname: "/WorkInProgress"
-            },
-            {
                 name: "Organize PDF",
-                description: "Sort pages of your PDF file however you like. Delete PDF pages or add PDF pages to your document at your convenience.",
+                description: "Sort pages of your PDF file however you like.",
                 img: "/static/Organize_PDF.svg",
                 category: "organize",
                 htmlname: "/WorkInProgress"
             },
             {
-                name: "PDF to PDF/A",
-                description: "Transform your PDF to PDF/A, the ISO-standardized version of PDF for long-term archiving. Your PDF will preserve formatting when accessed in the future.",
-                img: "/static/PDF_to_PDF_A.svg",
-                category: "convert",
-                subcatagory: "convertFromPDF",
-                htmlname: "/WorkInProgress"
-            },
-            {
-                name: "Repair PDF",
-                description: "Repair a damaged PDF and recover data from corrupt PDF. Fix PDF files with our Repair tool.",
-                img: "/static/Repair_PDF.svg",
-                category: "optimize",
-                htmlname: "/WorkInProgress"
-            },
-            {
                 name: "Page numbers",
-                description: "Add page numbers into PDFs with ease. Choose your positions, dimensions, typography.",
+                description: "Add page numbers into your PDFs.",
                 img: "/static/Page_numbers.svg",
                 category: "edit",
                 htmlname: "/WorkInProgress"
             },
             {
-                name: "Scan to PDF",
-                description: "Capture document scans from your mobile device and send them instantly to your browser.",
-                img: "/static/Scan_to_PDF.svg",
-                category: "organize",
-                htmlname: "/WorkInProgress"
-            },
-            {
                 name: "OCR PDF",
-                description: "Easily convert scanned PDF into searchable and selectable documents.",
+                description: "Convert scanned PDF into searchable and selectable documents.",
                 img: "/static/OCR_PDF.svg",
                 category: "optimize",
                 htmlname: "/WorkInProgress"
+            },
+            {
+                name: "HTML to PDF",
+                description: "Convert webpages in HTML to PDF.",
+                img: "/static/HTML_to_PDF.svg",
+                category: "convert",
+                subcatagory: "convertToPDF",
+                htmlname: "/WorkInProgress"
+                
             },
             {
                 name: "Compare PDF",
@@ -797,40 +750,32 @@
             },
             {
                 name: "Crop PDF",
-                description: "Crop margins of PDF documents or select specific areas. then apply the changes to one page or the whole document.",
+                description: "Crop margins of your PDF documents.",
                 img: "/static/Crop_PDF.svg",
                 category: "edit",
                 htmlname: "/WorkInProgress"
             },
             {
-                name: "PDF Forms",
-                description: "Detect form fields automatically, create interactive fillable PDFs, or fill PDF forms yourself. Add text fields, checkboxes, multiple choice fields. and lists.",
-                img: "/static/PDF_Forms.svg",
-                category: "edit",
-                htmlname: "/WorkInProgress"
-            },
-            {
                 name: "AI Summarizer",
-                description: "Quickly generate concise summaries from articles, paragraphs, and essays, providing clear and precise key points in seconds.",
+                description: "Quickly generate concise summaries from your PDFs.",
                 img: "/static/AI_Summarizer.svg",
                 category: "intelligence",
                 htmlname: "/WorkInProgress"
             },
             {
                 name: "Translate PDF",
-                description: "Easily translate PDF files powered by A1. Keep fonts, intact.",
+                description: "Easily translate PDF files powered by AI.",
                 img: "/static/Translate_PDF.svg",
                 category: "intelligence",
                 htmlname: "/WorkInProgress"
             },
             {
                 name: "PDF to Markdown",
-                description: "Easily turn PDFs into Markdown files, Perfect for notes, docs. and LLMs, Headings, tables, lists, and links preserved automatically.",
+                description: "Convert your PDFs into Markdown files.",
                 img: "/static/PDF_to_Markdown.svg",
                 category: "intelligence",
                 htmlname: "/WorkInProgress"
             }
-
         ]
 
         featureLoader()
@@ -1013,8 +958,5 @@
 
     </script>
 </body>
-
-
-
 
 </html>
