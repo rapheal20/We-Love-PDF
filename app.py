@@ -1,6 +1,7 @@
 from flask import *
 from werkzeug.utils import secure_filename
 import os
+import tempfile
 
 from MergePDF import MergePDFFunc
 from SplitPDF import SplitPDFFunc
@@ -10,7 +11,11 @@ from PDFToPowerPoint import PDFToPowerPointFunc
 
 app = Flask(__name__)
 
-OUTPUT_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs" 
+TEMP_DIR = tempfile.gettempdir()
+OUTPUT_DIR = TEMP_DIR
+
+# Uncomment for local running
+# OUTPUT_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs" 
 
 @app.route('/')
 def index():
@@ -22,7 +27,8 @@ def MergePDF():
         return render_template("MergePDF.html")
 
     elif request.method == "POST":
-        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
 
         files = request.files.getlist("files")
         savedPaths = []
@@ -44,7 +50,8 @@ def SplitPDF():
             return render_template("SplitPDF.html")
     
     elif request.method == "POST":
-        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
 
         file = request.files["files"]
 
@@ -68,7 +75,8 @@ def CompressPDF():
         return render_template("CompressPDF.html")
 
     elif request.method == "POST":
-        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
 
         file = request.files["files"]
         
@@ -87,7 +95,8 @@ def PDFToWord():
         return render_template("PDFToWord.html")
 
     elif request.method == "POST":
-        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
 
         file = request.files["files"]
         
@@ -106,7 +115,8 @@ def PDFToPowerPoint():
         return render_template("PDFToPowerPoint.html")
 
     elif request.method == "POST":
-        path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
 
         file = request.files["files"]
         
