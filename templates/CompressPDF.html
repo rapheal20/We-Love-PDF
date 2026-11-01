@@ -595,26 +595,30 @@
         function handleFiles(files) {
             if (files.length === 0) return;
 
-            for (let file of files) {
-                if (file.size > 4 * 1024 * 1024) {
-                    alert(`File "${file.name}" is too large. Maximum allowed size for serverless deployment is 4 MB.`);
-                    return;
-                }
-            }
+        const newFiles = Array.from(files);
+        
+        const prospectiveFiles = [...selectedFiles, ...newFiles];
+        const totalBytes = prospectiveFiles.reduce((sum, file) => sum + file.size, 0);
+        
+        const MAX_TOTAL_SIZE = 3.5 * 1024 * 1024; 
 
-            selectedFiles = [files[0]];
-
-            const dataTransfer = new DataTransfer();
-            selectedFiles.forEach(file => dataTransfer.items.add(file));
-            
-            fileInput.files = dataTransfer.files;
-
-            dropzone.style.display = 'none';
-            workspace.style.display = 'block';
-
-            renderPreviews();
+        if (totalBytes > MAX_TOTAL_SIZE) {
+            alert("The total size of your selected files exceeds the 3.5 MB serverless upload limit. Please select smaller files or fewer files at once or run the app locally.");
+            return;
         }
 
+        selectedFiles = prospectiveFiles;
+        updateFileInput();
+
+        dropzone.style.display = 'none';
+        workspace.style.display = 'block';
+        
+        const floatActions = document.getElementById('floatActions');
+        if (floatActions) floatActions.style.display = 'flex';
+
+        renderPreviews();
+    }
+       
         function renderPreviews() {
             previewGrid.innerHTML = '';
 
