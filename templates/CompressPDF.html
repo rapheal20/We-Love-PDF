@@ -595,6 +595,13 @@
         function handleFiles(files) {
             if (files.length === 0) return;
 
+            for (let file of files) {
+                if (file.size > 4 * 1024 * 1024) {
+                    alert(`File "${file.name}" is too large. Maximum allowed size for serverless deployment is 4 MB.`);
+                    return;
+                }
+            }
+
             selectedFiles = [files[0]];
 
             const dataTransfer = new DataTransfer();
