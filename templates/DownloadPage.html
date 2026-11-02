@@ -601,6 +601,34 @@
             menuHeader1.addEventListener('mouseenter', () => document.querySelector('.dropMenuConvert').classList.add('dropShow'));
             menuHeader1.addEventListener('mouseleave', () => document.querySelector('.dropMenuConvert').classList.remove('dropShow'));
         }
+
+        document.querySelectorAll('.downloadBtn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const url = button.href;
+                
+                try {
+                    const response = await fetch(url);
+                    const blob = await response.blob();
+                    const filename = url.split('/').pop();
+                    
+                    const blobUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = blobUrl;
+                    a.download = filename;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    window.URL.revokeObjectURL(blobUrl);
+                    document.body.removeChild(a);
+                } catch (err) {
+                    console.error('Download failed, falling back to direct navigation:', err);
+                    window.location.href = url;
+                }
+            });
+        });
     </script>
 </body>
 </html>

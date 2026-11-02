@@ -91,3 +91,7 @@ AI was used for:
 ---
 
 This project is made as part of Third Space event in Hack Club. 
+
+
+command to make exe: 
+pyinstaller --noconsole --onefile --hidden-import=cgi --add-data "templates;templates" --add-data "static;static" desktop.py

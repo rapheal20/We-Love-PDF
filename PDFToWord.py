@@ -273,6 +273,6 @@ def PDFToWordFunc(PDFPath):
         return [f"AppOutputs/{PDFName}.docx"]
     
     except Exception as e:
-        print(e)
+        raise e
 
 #PDFToWord("Inputs/file-example_PDF_500_kB.pdf")

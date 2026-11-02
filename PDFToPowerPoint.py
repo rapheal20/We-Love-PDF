@@ -172,6 +172,6 @@ def PDFToPowerPointFunc(PDFPath):
         return [outputPath]
   
     except Exception as e:
-        print(e)
+        raise e
         
 #PDFToPowerPoint(pdf1)

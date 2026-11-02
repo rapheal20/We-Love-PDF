@@ -402,9 +402,8 @@ def SplitPDFFunc(PDFPath, splitPage):
         PDF.close()
 
         return [f"AppOutputs/{PDFName}_Part1.pdf", f"AppOutputs/{PDFName}_Part2.pdf"]
-    except:
-        print("Error")
-        raise
+    except Exception as e:
+        raise e
         
 
 #SplitPDFFunc("Inputs/emaar2.pdf", 6)

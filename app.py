@@ -2,6 +2,7 @@ from flask import *
 from werkzeug.utils import secure_filename
 import os
 import tempfile
+import sys
 
 from MergePDF import MergePDFFunc
 from SplitPDF import SplitPDFFunc
@@ -12,12 +13,18 @@ from OCRPDF import OCRPDFFunc
 
 app = Flask(__name__)
 
-#TEMP_DIR = tempfile.gettempdir()
-#OUTPUT_DIR = TEMP_DIR
+'''if getattr(sys, 'frozen', False):
+    BASE_DIR = tempfile.gettempdir()
+else:
+    # If running locally during development, use project folders
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+'''
 
-# Uncomment for local running
-OUTPUT_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs" 
-TEMP_DIR = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+TEMP_DIR = tempfile.gettempdir()
+OUTPUT_DIR = TEMP_DIR
+
+os.makedirs(TEMP_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 @app.route('/')
 def index():
@@ -42,6 +49,9 @@ def MergePDF():
             savedPaths.append(fullPath)
 
         outputPaths = MergePDFFunc(*savedPaths)
+
+        if not outputPaths:
+            return "An error occurred while processing your PDF files.", 500
                 
         outputType = "merged PDF"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
@@ -67,6 +77,9 @@ def SplitPDF():
         file.save(fullPath)
 
         outputPaths = SplitPDFFunc(fullPath, page)
+
+        if not outputPaths:
+            return "An error occurred while processing your PDF files.", 500
             
         outputType = "PDF"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
@@ -88,6 +101,9 @@ def CompressPDF():
 
         outputPaths = PDFCompressFunc(fullPath)
 
+        if not outputPaths:
+            return "An error occurred while processing your PDF files.", 500
+
         outputType = "Compressed PDF"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
@@ -108,6 +124,9 @@ def PDFToWord():
 
         outputPaths = PDFToWordFunc(fullPath)
 
+        if not outputPaths:
+            return "An error occurred while processing your PDF files.", 500
+
         outputType = ".docx file"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
@@ -127,6 +146,9 @@ def PDFToPowerPoint():
         file.save(fullPath)
 
         outputPaths = OCRPDFFunc(fullPath)
+
+        if not outputPaths:
+            return "An error occurred while processing your PDF files.", 500
 
         outputType = "text file"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
