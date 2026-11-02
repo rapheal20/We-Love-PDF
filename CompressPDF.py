@@ -258,7 +258,8 @@ def PDFCompressFunc(pdf_file):
 
         encodedPDF = CombinePDFStr.encode("latin1") # encodes the pdf string back to latin1
         
-        TEMP_DIR = tempfile.gettempdir()
+        #TEMP_DIR = tempfile.gettempdir()
+        TEMP_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs"
         PDFName = os.path.basename(pdf_file).split(".")[0]
         output_filename = f"{PDFName}-Compressed.pdf"
         output_path = os.path.join(TEMP_DIR, output_filename)
@@ -267,9 +268,9 @@ def PDFCompressFunc(pdf_file):
             file.write(encodedPDF)
 
         return [output_path]
+
     except Exception as e:
         print(e)
-
 
 #PDF_Compress(pdf3)
 #PDFCompressFunc("Inputs/emaar2.pdf")

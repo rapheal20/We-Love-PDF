@@ -32,7 +32,7 @@ To make this challenging, we have not used any libraries except default python o
 21. Repair PDF (Work in progress)
 22. Page numbers (Done by Rapheal)
 22. Scan to PDF (Work in progress)
-23. OCR PDF (Done by Rapheal)
+23. OCR PDF (Done by Anael)
 24. Compare PDF (Work in progress)
 25. Redact PDF (Work in progress)
 26. Crop PDF (Work in progress)

@@ -8,14 +8,16 @@ from SplitPDF import SplitPDFFunc
 from CompressPDF import PDFCompressFunc
 from PDFToWord import PDFToWordFunc
 from PDFToPowerPoint import PDFToPowerPointFunc
+from OCRPDF import OCRPDFFunc
 
 app = Flask(__name__)
 
-TEMP_DIR = tempfile.gettempdir()
-OUTPUT_DIR = TEMP_DIR
+#TEMP_DIR = tempfile.gettempdir()
+#OUTPUT_DIR = TEMP_DIR
 
 # Uncomment for local running
-# OUTPUT_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs" 
+OUTPUT_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs" 
+TEMP_DIR = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
 
 @app.route('/')
 def index():
@@ -124,9 +126,29 @@ def PDFToPowerPoint():
         fullPath = os.path.join(path, filename)
         file.save(fullPath)
 
-        outputPaths = PDFToPowerPointFunc(fullPath)
+        outputPaths = OCRPDFFunc(fullPath)
 
-        outputType = ".pptx file"
+        outputType = "text file"
+        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+
+@app.route('/OCRPDF', methods=["GET", "POST"])
+def OCRPDF():
+    if request.method == "GET":
+        return render_template("OCRPDF.html")
+
+    elif request.method == "POST":
+        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
+        path = TEMP_DIR
+
+        file = request.files["files"]
+        
+        filename = secure_filename(file.filename)
+        fullPath = os.path.join(path, filename)
+        file.save(fullPath)
+
+        outputPaths = OCRPDFFunc(fullPath)
+
+        outputType = "text file"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route("/WorkInProgress")

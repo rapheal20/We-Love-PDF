@@ -30,7 +30,7 @@ pdf4 = "Inputs\\file-example_PDF_500_kB.pdf"
 # pdf3 = "Inputs\\emaar1.pdf"
 # pdf4 = "Inputs\\emaar.pdf"
 
-def Merge_PDF(pdf1, pdf2):
+def MergePDFFunc(pdf1, pdf2):
     try:
         #rb mode is for read only in binary mode
         PDF1 = open(pdf1, "rb")
@@ -162,5 +162,5 @@ def Merge_PDF(pdf1, pdf2):
         print("Error")
 
 
-Merge_PDF(pdf3, pdf4)
+#Merge_PDF(pdf3, pdf4)
 

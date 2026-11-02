@@ -3,3 +3,4 @@ Werkzeug
 python-docx
 python-pptx
 Pillow
+pytesseract
