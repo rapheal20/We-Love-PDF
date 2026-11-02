@@ -436,3 +436,73 @@ def PDF_ID_Remap(PDF_Data, PDFString, OriginalID):
     PDFString = re.sub(r'\b(\d+)\s+0\s+obj\b', Obj_Declaration, PDFString, flags=re.IGNORECASE)
     PDFString = re.sub(r'\b(\d+)\s+0\s+R\b', Obj_Reference, PDFString, flags=re.IGNORECASE)
     return PDFString
+
+
+
+def FindParentsandKids(PDF, XrefTable, RootID, PDF_Data, DecompressedObjs):
+    IDS_to_Remove = [RootID]
+    ParentRefOffset = XrefTable[RootID]['offset']
+    ParentFindStr = r"\s*/\s*Pages\s*(\d+)\s*0\s*R"
+    ParentID = int((re.search(ParentFindStr, PDF_Data[ParentRefOffset:], flags=re.IGNORECASE)).group(1))
+    IDS_to_Remove.append(ParentID)
+    try:
+        ParentBody = GetObjectBytes(PDF, XrefTable, ParentID, DecompressedObjs)
+        ParentBody = ParentBody.decode('latin1')
+        KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
+    except:
+        ParentBodyStart = (re.search(fr"\b{ParentID}\s+0\s+obj", PDF_Data, flags=re.IGNORECASE)).start()
+        ParentBodyEnd = (re.search(objectEndString, PDF_Data[ParentBodyStart:], flags=re.IGNORECASE)).end() + ParentBodyStart  
+        ParentBody = PDF_Data[ParentBodyStart:ParentBodyEnd]
+        KidStart = (re.search(r"/\s*Kids", ParentBody, flags=re.IGNORECASE)).start()
+    # print(KidStart)
+
+    #  searches for the kids in the parent obj and appends in the list
+    KidsFindString = r"(\d+)\s*0\s*R"
+    
+    KidEnd = (re.search("]", ParentBody[KidStart:], flags=re.IGNORECASE)).end() + KidStart
+    Kids = re.finditer(KidsFindString, ParentBody[KidStart:KidEnd], flags=re.IGNORECASE)
+
+    Kids_List = []
+    for kid in Kids:
+        Kids_List.append(int(kid.group(1)))
+
+    # finds the total number of pages
+    PageCountString = r"/\s*Count\s*(\d+)"
+    PageCount = (re.search(PageCountString, ParentBody, flags=re.IGNORECASE)).group(1)
+
+    # if the extracted kids donot match with the count, then if means PDF has subParents, so then it goes to each subparent and and extracts its kids
+    if int(PageCount) != (len(Kids_List)): 
+        KidPages = []
+        for kidID in Kids_List:
+            IDS_to_Remove.append(kidID)
+            KidObj = GetObjectBytes(PDF, XrefTable, kidID, DecompressedObjs)
+            KidObj = KidObj.decode('latin1')
+
+            KidStart = (re.search(r"/\s*Kids", KidObj, flags=re.IGNORECASE)).start()
+            KidEnd = (re.search("]", KidObj[KidStart:], flags=re.IGNORECASE)).end() + KidStart                       
+            SubKids = re.finditer(KidsFindString, KidObj[KidStart:KidEnd], flags=re.IGNORECASE)
+            for SubKid in SubKids:
+                KidPages.append(int(SubKid.group(1)))
+
+        # replaces the subParents with the new pages list
+        Kids_List = KidPages
+    return Kids_List, IDS_to_Remove, ParentID
+
+
+
+
+
+ #this addes the Highest ID of PDF 1 into all the object ids of PDF 2 to avoid any repetition
+def ObjectExtraction(pdfDataStr, xreftab, idOffset=0):
+    ObjectList =[]
+    for objID, objData in xreftab.items():
+        if objData.get("type") == "n" and objData.get("offset") > 0:
+            offset = objData['offset']
+            ObjEnd = (re.search(objectEndString, pdfDataStr[offset:], flags=re.IGNORECASE)).start() + offset
+            newID = objID + idOffset
+            ObjectList.append({
+                "OriginalID" : int(objID),
+                "NewID" : int(newID),
+                "Content" : pdfDataStr[offset:ObjEnd]
+                })
+    return ObjectList
