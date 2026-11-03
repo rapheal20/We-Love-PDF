@@ -498,7 +498,7 @@ def ObjectExtraction(pdfDataStr, xreftab, idOffset=0):
     for objID, objData in xreftab.items():
         if objData.get("type") == "n" and objData.get("offset") > 0:
             offset = objData['offset']
-            ObjEnd = (re.search(objectEndString, pdfDataStr[offset:], flags=re.IGNORECASE)).start() + offset
+            ObjEnd = (re.search(objectEndString, pdfDataStr[offset:], flags=re.IGNORECASE)).end() + offset
             newID = objID + idOffset
             ObjectList.append({
                 "OriginalID" : int(objID),

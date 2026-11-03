@@ -1,7 +1,9 @@
 from helperfunctions import *
 import tempfile
 
-pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
+# pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
+# pdf1 = "Inputs\\file-example_PDF_1MB.pdf"
+pdf1 = "Inputs\\emaar1.pdf"
 
 def AddPageNumbers(pdf1):
     PDF1 = open(pdf1, "rb")
@@ -23,7 +25,6 @@ def AddPageNumbers(pdf1):
 
 
     Pdf1_highestID = max(XrefTable.keys()) if XrefTable else 0
-    # print(Pdf1_highestID)
     fontObjID = int(Pdf1_highestID) +1
     fontObjStr = f"\n{fontObjID} 0 obj\n<</Type /Font /Subtype /Type1 /BaseFont /Helvetica>>\nendobj\n"
 
@@ -33,18 +34,21 @@ def AddPageNumbers(pdf1):
     streamID = fontObjID
     for pageID in (PDF_Pages):
         pageNo += 1
-        textContentStream = f"BT /PageNumFont 10 Tf 350 30 Td (Page {pageNo})"
-        compressedStream = zlib.compress(textContentStream.encode("latin1"))
+        textContentStream = f"BT 0 0 0 rg /PageNumFont 10 Tf 515 35 Td (Page {pageNo}) Tj ET"
+        # compressedStream = zlib.compress(textContentStream.encode("latin1"))
 
+        # decodedStream = compressedStream.decode("latin1")/Filter /FlateDecode
         streamID += 1
         streamObjStr = (
             f"\n{streamID} 0 obj\n"
-            f"<</Length {len(compressedStream)} /Filter /FlateDecode>>\n"
+            f"<</Length {len(textContentStream)} >>\n"
             f"stream\n"
-            f"{compressedStream}"
-            f"\nendobj\n"
+            f"{textContentStream}"
+            f"\nendstream\nendobj\n"
         )
 
+        # print(streamObjStr)
+    
         NewObj[pageID]= {"ID" : streamID, "content" : streamObjStr}
 
     PDF1_Objs = ObjectExtraction(PDF1String, XrefTable)
@@ -89,24 +93,27 @@ def AddPageNumbers(pdf1):
                 contentStart = int(singleContent.start())
                 contentEnd = int(singleContent.end())
                 NewContent = content[:contentStart]
-                NewContent += f"/Contents [{singleContent.group(1)} 0 R, {NewObj[OBJ_ID]["ID"]} 0 R]"
-                NewContent += content[contentEnd:] + "endobj\n\n"
+                NewContent += f"/Contents [{singleContent.group(1)} 0 R {NewObj[OBJ_ID]["ID"]} 0 R]"
+                NewContent += content[contentEnd:]  + "\n\n"
             # print(content)
             # print(NewContent)
             # break
-            NEW_PDF_STR += NewContent + "\nendobj\n"
+            NEW_PDF_STR += NewContent # + "\nendobj\n"
 
         else:
             if ObjData["OriginalID"] in editedRes.keys():
-                NEW_PDF_STR += editedRes[ObjData["OriginalID"]] + "endobj\n\n"
+                NEW_PDF_STR += editedRes[ObjData["OriginalID"]] + "\n\n"
                 # print("Added")
             else:
-                NEW_PDF_STR += ObjData["Content"] + "endobj\n\n"
-                print(ObjData["Content"][:100])
-                break
+                NEW_PDF_STR += ObjData["Content"] + "\n\n"
+                # print(ObjData["Content"][:100])
+                # break
 
+    NEW_PDF_STR += fontObjStr
     for PageNumObj in NewObj.values():
         NEW_PDF_STR += PageNumObj["content"] + "\n"
+
+    
 
 
 
@@ -132,7 +139,7 @@ def AddPageNumbers(pdf1):
     with open("test.pdf" , "wb") as file:
         file.write(encodedPDF)
     
-    print("done")
+    # print("done")
 
 
 
