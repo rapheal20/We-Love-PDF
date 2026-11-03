@@ -32,11 +32,15 @@ def OCRPDFFunc(PDFPath):
         if not extractedText.strip():
             extractedText = "No extractable image layers found for OCR."
 
-        TEMP_DIR = tempfile.gettempdir() 
+        user_home = os.path.expanduser('~')
+
+        BASE_DIR = f"{user_home}/WeLovePDF_Storage"
+
+        os.makedirs(BASE_DIR, exist_ok=True)
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
         output_filename = f"{PDFName}-text.txt"
-        output_path = os.path.join(TEMP_DIR, output_filename)
+        output_path = os.path.join(BASE_DIR, output_filename)
 
         with open(output_path, "w", encoding="utf-8") as f:
                 f.write(extractedText)

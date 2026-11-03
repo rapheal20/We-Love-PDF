@@ -4,7 +4,7 @@ import os
 from io import BytesIO
 from PIL import Image
 from helperfunctions import *
-import tempfile
+
 
 '''
 MAIN DATA STRUCTURE
@@ -258,10 +258,15 @@ def PDFCompressFunc(pdf_file):
 
         encodedPDF = CombinePDFStr.encode("latin1") # encodes the pdf string back to latin1
         
-        TEMP_DIR = tempfile.gettempdir()
+        user_home = os.path.expanduser('~')
+
+        BASE_DIR = f"{user_home}/WeLovePDF_Storage"
+
+        os.makedirs(BASE_DIR, exist_ok=True)
+
         PDFName = os.path.basename(pdf_file).split(".")[0]
         output_filename = f"{PDFName}-Compressed.pdf"
-        output_path = os.path.join(TEMP_DIR, output_filename)
+        output_path = os.path.join(BASE_DIR, output_filename)
 
         with open(output_path, "wb") as file:
             file.write(encodedPDF)

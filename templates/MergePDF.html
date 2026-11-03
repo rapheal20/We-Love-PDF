@@ -13,7 +13,7 @@
             src: url('/static/Graphik-Regular.otf') format('opentype');
             font-weight: 400;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
             }
 
         @font-face {
@@ -21,7 +21,7 @@
             src: url('/static/Graphik-Semi-Bold.otf') format('opentype');
             font-weight: 600;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
             }
 
         @font-face {
@@ -29,7 +29,7 @@
             src: url('/static/Graphik-Medium.otf') format('opentype');
             font-weight: 500;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
             }
         
         body{
@@ -977,6 +977,24 @@
                 }
             });
         }
+        document.querySelectorAll('form').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                const submitBtn = form.querySelector('button[type="submit"], input[type="submit"]');
+                if (submitBtn) {
+                    if (submitBtn.disabled) {
+                        e.preventDefault();
+                        return;
+                    }
+                    submitBtn.disabled = true;
+                    submitBtn.style.opacity = '0.6';
+                    submitBtn.style.cursor = 'not-allowed';
+                    if (submitBtn.tagName === 'BUTTON') {
+                        submitBtn.dataset.originalText = submitBtn.textContent;
+                        submitBtn.textContent = 'Processing...';
+                    }
+                }
+            });
+        });
     </script>
 </body>
 </html>

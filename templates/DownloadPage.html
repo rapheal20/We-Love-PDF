@@ -11,7 +11,7 @@
             src: url('/static/Graphik-Regular.otf') format('opentype');
             font-weight: 400;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
         }
 
         @font-face {
@@ -19,7 +19,7 @@
             src: url('/static/Graphik-Semi-Bold.otf') format('opentype');
             font-weight: 600;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
         }
 
         @font-face {
@@ -27,7 +27,7 @@
             src: url('/static/Graphik-Medium.otf') format('opentype');
             font-weight: 500;
             font-style: normal;
-            font-display: swap;
+            font-display: block;
         }
         
         body {
@@ -336,10 +336,21 @@
 
     <div class="bodySection1">
         <div class="bodyHolder">
-            <h1 class="mainTitle">Your files are ready!</h1>
-            <p class="mainSubtitle">Your PDF files have been successfully processed.</p>
+            <h1 class="mainTitle" id="title">
+                {% if convertUrl %}Converting your file...{% else %}Your files are ready!{% endif %}
+            </h1>
+            <p class="mainSubtitle" id="subtitle">
+                {% if convertUrl %}Please keep this window open.{% else %}Your PDF files have been successfully processed.{% endif %}
+            </p>
 
-            <div>
+            {% if convertUrl %}
+            <div id="loadingBar" style="width:320px; max-width:80%; height:8px; background:rgba(255,255,255,0.4); border-radius:4px; overflow:hidden; margin:0 auto 32px;">
+                <span style="display:block; width:40%; height:100%; background:#f10291; border-radius:4px; animation:slide 1.2s ease-in-out infinite;"></span>
+            </div>
+            <style>@keyframes slide { 0% { margin-left:-40%; } 100% { margin-left:100%; } }</style>
+            {% endif %}
+
+            <div id="buttons">
                 {% for f in outputFiles %}
                     <a href="{{ url_for('download', filename=f) }}" class="downloadBtn">
                         Download {{ outputType }} {% if outputFiles|length > 1 %} (Part {{ loop.index }}){% endif %}
@@ -361,6 +372,39 @@
             </div>
         </div>
     </footer>
+
+    {% if convertUrl %}
+        <div id="convertInfo" data-url="{{ convertUrl }}" data-type="{{ outputType }}" hidden></div>
+
+        <script>
+            const info = document.getElementById("convertInfo");
+
+            fetch(info.dataset.url)
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    document.getElementById("loadingBar").style.display = "none";
+                    if (!ok) throw new Error(data.error || "Conversion failed");
+
+                    document.getElementById("title").textContent = "Your files are ready!";
+                    document.getElementById("subtitle").textContent = "Your PDF files have been successfully processed.";
+
+                    const box = document.getElementById("buttons");
+                    data.files.forEach((name, i) => {
+                        const a = document.createElement("a");
+                        a.className = "downloadBtn";
+                        a.href = "/download/" + encodeURIComponent(name);
+                        a.textContent = "Download " + info.dataset.type +
+                            (data.files.length > 1 ? " (Part " + (i + 1) + ")" : "");
+                        box.appendChild(a);
+                    });
+                })
+                .catch(err => {
+                    document.getElementById("loadingBar").style.display = "none";
+                    document.getElementById("title").textContent = "Something went wrong";
+                    document.getElementById("subtitle").textContent = err.message;
+                });
+        </script>
+    {% endif %}
 
     <script>
         const features= [

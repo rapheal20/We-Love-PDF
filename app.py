@@ -13,14 +13,9 @@ from OCRPDF import OCRPDFFunc
 
 app = Flask(__name__)
 
-'''if getattr(sys, 'frozen', False):
-    BASE_DIR = tempfile.gettempdir()
-else:
-    # If running locally during development, use project folders
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-'''
+user_home = os.path.expanduser('~')
 
-BASE_DIR = os.path.join(os.path.expanduser('~'), 'WeLovePDF_Storage')
+BASE_DIR = f"{user_home}/WeLovePDF_Storage"
 
 os.makedirs(BASE_DIR, exist_ok=True)
 
@@ -34,25 +29,19 @@ def MergePDF():
         return render_template("MergePDF.html")
 
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         files = request.files.getlist("files")
-        savedPaths = []
-
-        for file in files:
-            filename = secure_filename(file.filename)
-            fullPath = os.path.join(path, filename)
+        savedNames = []
+        for i, file in enumerate(files):
+            filename = os.path.splitext(secure_filename(file.filename))[0] or f"upload_{i}"
+            fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+            fullPath = os.path.normpath(fullPath)
             file.save(fullPath)
-            savedPaths.append(fullPath)
+            savedNames.append(filename)
 
-        outputPaths = MergePDFFunc(*savedPaths)
+        fileQuery = ",".join(savedNames)
 
-        if not outputPaths:
-            return "An error occurred while processing your PDF files.", 500
-                
         outputType = "merged PDF"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="MergePDF", files=fileQuery))
 
 @app.route('/SplitPDF', methods=["GET", "POST"])
 def SplitPDF():
@@ -60,9 +49,6 @@ def SplitPDF():
             return render_template("SplitPDF.html")
     
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         file = request.files["files"]
 
         try:
@@ -70,17 +56,13 @@ def SplitPDF():
         except:
             return "Page must be a number", 400
         
-        filename = secure_filename(file.filename)
-        fullPath = os.path.join(path, filename)
+        filename = os.path.splitext(secure_filename(file.filename))[0] or "upload"
+        fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+        fullPath = os.path.normpath(fullPath)
         file.save(fullPath)
 
-        outputPaths = SplitPDFFunc(fullPath, page)
-
-        if not outputPaths:
-            return "An error occurred while processing your PDF files.", 500
-            
         outputType = "PDF"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="SplitPDF", file=filename, page=page))
 
 @app.route('/CompressPDF', methods=["GET", "POST"])
 def CompressPDF():
@@ -88,22 +70,15 @@ def CompressPDF():
         return render_template("CompressPDF.html")
 
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         file = request.files["files"]
         
-        filename = secure_filename(file.filename)
-        fullPath = os.path.join(path, filename)
+        filename = os.path.splitext(secure_filename(file.filename))[0] or "upload"
+        fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+        fullPath = os.path.normpath(fullPath)
         file.save(fullPath)
 
-        outputPaths = PDFCompressFunc(fullPath)
-
-        if not outputPaths:
-            return "An error occurred while processing your PDF files.", 500
-
         outputType = "Compressed PDF"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="CompressPDF", file=filename))
 
 @app.route('/PDFToWord', methods=["GET", "POST"])
 def PDFToWord():
@@ -111,22 +86,15 @@ def PDFToWord():
         return render_template("PDFToWord.html")
 
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         file = request.files["files"]
         
-        filename = secure_filename(file.filename)
-        fullPath = os.path.join(path, filename)
+        filename = os.path.splitext(secure_filename(file.filename))[0] or "upload"
+        fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+        fullPath = os.path.normpath(fullPath)
         file.save(fullPath)
 
-        outputPaths = PDFToWordFunc(fullPath)
-
-        if not outputPaths:
-            return "An error occurred while processing your PDF files.", 500
-
         outputType = ".docx file"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="PDFToWord", file=filename))
 
 @app.route('/PDFToPowerPoint', methods=["GET", "POST"])
 def PDFToPowerPoint():
@@ -134,30 +102,14 @@ def PDFToPowerPoint():
         return render_template("PDFToPowerPoint.html")
 
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         file = request.files["files"]
-        
-        filename = secure_filename(file.filename)
-        fullPath = os.path.join(path, filename)
-        
-        #file.save(fullPath)
-
-        with open(fullPath, "wb") as f:
-            while True:
-                chunk = file.stream.read(16384)
-                if not chunk:
-                    break
-                f.write(chunk)
-
-        outputPaths = PDFToPowerPointFunc(fullPath)
-
-        if not outputPaths:
-            return "An error occurred while processing your PDF files.", 500
+        filename = os.path.splitext(secure_filename(file.filename))[0] or "upload"
+        fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+        fullPath = os.path.normpath(fullPath)
+        file.save(fullPath)
 
         outputType = ".pptx file"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="PDFToPowerPoint", file=filename))
 
 @app.route('/OCRPDF', methods=["GET", "POST"])
 def OCRPDF():
@@ -165,19 +117,15 @@ def OCRPDF():
         return render_template("OCRPDF.html")
 
     elif request.method == "POST":
-        #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = BASE_DIR
-
         file = request.files["files"]
         
-        filename = secure_filename(file.filename)
-        fullPath = os.path.join(path, filename)
+        filename = os.path.splitext(secure_filename(file.filename))[0] or "upload"
+        fullPath = os.path.join(BASE_DIR, f"{filename}.pdf")
+        fullPath = os.path.normpath(fullPath)
         file.save(fullPath)
 
-        outputPaths = OCRPDFFunc(fullPath)
-
         outputType = "text file"
-        return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
+        return render_template("DownloadPage.html", outputType=outputType, convertUrl=url_for("convert", tool="OCRPDF", file=filename))
 
 @app.route("/WorkInProgress")
 def WorkInProgress():
@@ -188,4 +136,41 @@ def download(filename):
     try:
         return send_from_directory(BASE_DIR, filename, as_attachment=True)
     except FileNotFoundError:
-        return "The processed file has expired or was cleared from temporary storage. Please try processing it again.", 404
+        return "The processed file has expired or was cleared from storage. Please try processing it again.", 404
+
+TOOLS = {
+    "MergePDF": MergePDFFunc,
+    "SplitPDF": SplitPDFFunc,
+    "CompressPDF": PDFCompressFunc,
+    "PDFToWord": PDFToWordFunc,
+    "PDFToPowerPoint": PDFToPowerPointFunc,
+    "OCRPDF": OCRPDFFunc
+}
+
+@app.route('/convert/<tool>')
+def convert(tool):
+    func = TOOLS.get(tool)
+
+    fileParam = request.args.get("files", "") or request.args.get("file", "")
+    if not fileParam:
+        return jsonify(error="File not found. Please upload it again."), 404
+
+    filenames = fileParam.split(",")
+    paths = [os.path.join(BASE_DIR, f"{name.strip()}.pdf") for name in filenames]
+
+    for path in paths:
+        if not os.path.isfile(path):
+            return jsonify(error="File not found. Please upload it again."), 404
+    
+    try:
+        if tool == "MergePDF":
+            outputs = func(*paths)
+        elif tool == "SplitPDF":
+            page = int(request.args.get("page", 1))
+            outputs = func(paths[0], page)
+        else:
+            outputs = func(paths[0])
+            
+        return jsonify(files=[os.path.basename(p) for p in outputs])
+    except Exception as e:
+        raise e

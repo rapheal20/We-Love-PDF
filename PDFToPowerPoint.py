@@ -16,9 +16,12 @@ from werkzeug.utils import secure_filename
 #pdf1 = "Inputs\\emaar1.pdf"
 
 def PDFToPowerPointFunc(PDFPath):
-    BASE_DIR = os.path.join(os.path.expanduser('~'), 'WeLovePDF_Storage')
+    user_home = os.path.expanduser('~')
+
+    BASE_DIR = f"{user_home}/WeLovePDF_Storage"
 
     os.makedirs(BASE_DIR, exist_ok=True)
+
     try:
         extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
 
@@ -168,7 +171,7 @@ def PDFToPowerPointFunc(PDFPath):
 
             PDFName = os.path.basename(PDFPath).split(".")[0]
             output_path = os.path.join(BASE_DIR, f"{PDFName}.pptx")
-            print(output_path,"Thisss")
+            output_path = os.path.normpath(output_path)
 
             prs.save(output_path)
 
@@ -176,6 +179,7 @@ def PDFToPowerPointFunc(PDFPath):
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
         output_path = os.path.join(BASE_DIR, f"{PDFName}.pptx")
+        output_path = os.path.normpath(output_path)
 
         return [output_path]
     

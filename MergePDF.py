@@ -23,16 +23,21 @@ Whats New:
 '''
 import re
 from helperfunctions import *
-import tempfile
 import os
 
 
-pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
-pdf4 = "Inputs\\file-example_PDF_500_kB.pdf"
+#pdf3 = "Inputs\\file-example_PDF_1MB.pdf"
+#pdf4 = "Inputs\\file-example_PDF_500_kB.pdf"
 # pdf3 = "Inputs\\emaar1.pdf"
 # pdf4 = "Inputs\\emaar.pdf"
 
 def MergePDFFunc(*pdfs):
+    user_home = os.path.expanduser('~')
+
+    BASE_DIR = f"{user_home}/WeLovePDF_Storage"
+
+    os.makedirs(BASE_DIR, exist_ok=True)
+
     try:
         def FindParentsandKids(PDF, XrefTable, RootID, PDF_Data, DecompressedObjs):
             IDS_to_Remove = [RootID]
@@ -198,9 +203,8 @@ def MergePDFFunc(*pdfs):
         encodedPDF = CombinePDFStr.encode("latin1")
 
 
-        TEMP_DIR = tempfile.gettempdir()
         PDFName = os.path.basename(pdfs[0]).split(".")[0]
-        output_path = os.path.join(TEMP_DIR, f"{PDFName}-Merged.pdf")
+        output_path = os.path.join(BASE_DIR, f"{PDFName}-Merged.pdf")
 
         with open(output_path , "wb") as file:
             file.write(encodedPDF)

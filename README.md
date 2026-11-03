@@ -1,7 +1,7 @@
 ## We love PDF
 We love PDF is a complete recreation of the website "I love PDF. It is being coded by Anael and Rapheal.
 
-**Website:** https://we-love-pdf-omega.vercel.app/
+This project was initally planned as a website, but while hosting we realized the limitations of free hosting services like vercel. That's why, now it is an application that runs locally on your computer. A release will be added soon.
 
 Vercel only allows files upto 4 MB to be uploaded. That's why, only files upto 4 MB can be processed on the website,but heavier files can be processed by runing the program locally. 
 

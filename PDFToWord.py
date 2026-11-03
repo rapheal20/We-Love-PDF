@@ -264,13 +264,18 @@ def PDFToWordFunc(PDFPath):
             lastY, lastSize = (lastY, lastSize) if script else (s['y'], s['size'])
             lastEnd = s['ex'] + s['wid']
 
+        user_home = os.path.expanduser('~')
+
+        BASE_DIR = f"{user_home}/WeLovePDF_Storage"
+
+        os.makedirs(BASE_DIR, exist_ok=True)
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
-        outputPath = f"AppOutputs/{PDFName}.docx"
+        outputPath = f"{BASE_DIR}/{PDFName}.docx"
 
-        os.makedirs(os.path.dirname(outputPath) or ".", exist_ok=True)
         doc.save(outputPath)
-        return [f"AppOutputs/{PDFName}.docx"]
+        
+        return [f"{BASE_DIR}/{PDFName}.docx"]
     
     except Exception as e:
         raise e

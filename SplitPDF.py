@@ -6,6 +6,12 @@ import re
 import zlib
 
 def SplitPDFFunc(PDFPath, splitPage):
+    user_home = os.path.expanduser('~')
+
+    BASE_DIR = f"{user_home}/WeLovePDF_Storage"
+
+    os.makedirs(BASE_DIR, exist_ok=True)
+
     try:
         PDF = open(PDFPath, "rb")
 
@@ -396,12 +402,12 @@ def SplitPDFFunc(PDFPath, splitPage):
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
 
-        ExportPDFPart(part1Pages, f"AppOutputs/{PDFName}_Part1.pdf")
-        ExportPDFPart(part2Pages, f"AppOutputs/{PDFName}_Part2.pdf")
+        ExportPDFPart(part1Pages, f"{BASE_DIR}/{PDFName}_Part1.pdf")
+        ExportPDFPart(part2Pages, f"{BASE_DIR}/{PDFName}_Part2.pdf")
 
         PDF.close()
 
-        return [f"AppOutputs/{PDFName}_Part1.pdf", f"AppOutputs/{PDFName}_Part2.pdf"]
+        return [f"{BASE_DIR}/{PDFName}_Part1.pdf", f"{BASE_DIR}/{PDFName}_Part2.pdf"]
     except Exception as e:
         raise e
         

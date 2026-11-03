@@ -690,7 +690,9 @@ def parse_pdf_to_spans(PDFPath):
 
     if pagesObjectID:
         pageParser(pagesObjectID)
+
     PDF.close()
+    
     return allElements, None
 
 
