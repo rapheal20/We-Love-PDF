@@ -1,12 +1,15 @@
 import threading
 import webview
 from app import app 
+import os 
 
 def run_flask():
     app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False)
 
 if __name__ == '__main__':
     webview.settings['ALLOW_DOWNLOADS'] = True
+
+    app_data_path = os.path.join(os.path.expanduser('~'), '.welovepdf_data')
 
     t = threading.Thread(target=run_flask)
     t.daemon = True

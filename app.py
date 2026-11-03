@@ -20,11 +20,9 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 '''
 
-TEMP_DIR = tempfile.gettempdir()
-OUTPUT_DIR = TEMP_DIR
+BASE_DIR = os.path.join(os.path.expanduser('~'), 'WeLovePDF_Storage')
 
-os.makedirs(TEMP_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(BASE_DIR, exist_ok=True)
 
 @app.route('/')
 def index():
@@ -37,7 +35,7 @@ def MergePDF():
 
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         files = request.files.getlist("files")
         savedPaths = []
@@ -63,7 +61,7 @@ def SplitPDF():
     
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         file = request.files["files"]
 
@@ -91,7 +89,7 @@ def CompressPDF():
 
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         file = request.files["files"]
         
@@ -114,7 +112,7 @@ def PDFToWord():
 
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         file = request.files["files"]
         
@@ -137,20 +135,28 @@ def PDFToPowerPoint():
 
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         file = request.files["files"]
         
         filename = secure_filename(file.filename)
         fullPath = os.path.join(path, filename)
-        file.save(fullPath)
+        
+        #file.save(fullPath)
 
-        outputPaths = OCRPDFFunc(fullPath)
+        with open(fullPath, "wb") as f:
+            while True:
+                chunk = file.stream.read(16384)
+                if not chunk:
+                    break
+                f.write(chunk)
+
+        outputPaths = PDFToPowerPointFunc(fullPath)
 
         if not outputPaths:
             return "An error occurred while processing your PDF files.", 500
 
-        outputType = "text file"
+        outputType = ".pptx file"
         return render_template("DownloadPage.html", outputType=outputType, outputFiles=[os.path.basename(p) for p in outputPaths])
 
 @app.route('/OCRPDF', methods=["GET", "POST"])
@@ -160,7 +166,7 @@ def OCRPDF():
 
     elif request.method == "POST":
         #path = "D:/CS related/Third Space/We-Love-PDF/AppInputs"
-        path = TEMP_DIR
+        path = BASE_DIR
 
         file = request.files["files"]
         
@@ -180,6 +186,6 @@ def WorkInProgress():
 @app.route('/download/<filename>')
 def download(filename):
     try:
-        return send_from_directory(OUTPUT_DIR, filename, as_attachment=True)
+        return send_from_directory(BASE_DIR, filename, as_attachment=True)
     except FileNotFoundError:
         return "The processed file has expired or was cleared from temporary storage. Please try processing it again.", 404

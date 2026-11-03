@@ -32,8 +32,7 @@ def OCRPDFFunc(PDFPath):
         if not extractedText.strip():
             extractedText = "No extractable image layers found for OCR."
 
-        #TEMP_DIR = tempfile.gettempdir() 
-        TEMP_DIR = "D:/CS related/Third Space/We-Love-PDF/AppOutputs"
+        TEMP_DIR = tempfile.gettempdir() 
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
         output_filename = f"{PDFName}-text.txt"
