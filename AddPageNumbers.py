@@ -49,18 +49,21 @@ def AddPageNumbers(pdf1):
     PDF1_Objs = ObjectExtraction(PDF1String, XrefTable)
 
     NewHeader = Make_Header(PDF1String)
-    NewPDFStr = NewHeader + "\n\n"
 
 
-    editedRes = []
+    editedRes = {}
+
+    # print(PDF1_Objs)
+
+    NEW_PDF_STR = NewHeader + "\n\n"
     for ObjData in (PDF1_Objs):
         if ObjData["OriginalID"] in PDF_Pages:
             AlreadyMultiple = False
             content = ObjData["Content"]
             resources = (re.search(r"/\s*Resources (\d+) 0 R", content, flags=re.IGNORECASE))
             resourcesID = resources.group(1)
-            if resourcesID not in editedRes:
-                editedRes.append(resourcesID)
+            if resourcesID not in editedRes.keys():
+                editedRes[resourcesID] = content
                 resObjOffset = XrefTable[int(resourcesID)]["offset"]
                 resObjEnd = re.search(objectEndString, PDF1String[resObjOffset:], flags=re.IGNORECASE).end() + resObjOffset
                 resObj = PDF1String[resObjOffset:resObjEnd]
@@ -72,16 +75,30 @@ def AddPageNumbers(pdf1):
                     fontObjEnd = re.search(objectEndString, PDF1String[fontObjStart:], flags=re.IGNORECASE).end() + fontObjStart
                     fontObj = PDF1String[fontObjStart:fontObjEnd]
 
-                    # newRes = resObj[:singleFontStart-1]
-                    # newRes += f"/Font << /PageNumFont {fontObjID} 0 R "
-                    # newRes += 
+                    fontend = (re.search(">>", fontObj, flags=re.IGNORECASE)).start()
+                    newFontObj = fontObj[:fontend]
+                    newFontObj += f" /PageNumFont {fontObjID} 0 R "
+                    newFontObj += fontObj[fontend:]
+                    editedRes[int(fontID)] = newFontObj
+                    print(newFontObj)
+
+            singleContent = re.search(r"/Contents (\d+) 0 R", content, flags=re.IGNORECASE)
+            if singleContent:
+                contentStart = int(singleContent.start()) - 1
+                NewContent = content[:contentStart]
+                NewContent += f"/Contents [{singleContent.group(1)} 0 R, {singleContent.group(1)} 0 R]"
+
+        else:
+            if ObjData["OriginalID"] in editedRes.keys():
+                NEW_PDF_STR += editedRes[ObjData["OriginalID"]]
+                print("Added")
+            else:
+                NEW_PDF_STR += ObjData["Content"]
+                print("Added Same")
 
 
-                
-                # resourcesObj = GetObjectBytes(PDF1, XrefTable, resourcesID, decompressedObjs)
-                print(resObj)
-            
-            
+
+
             # if not resources:
             #     AlreadyMultiple = True
 
