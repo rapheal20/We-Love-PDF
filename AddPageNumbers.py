@@ -1,4 +1,5 @@
 from helperfunctions import *
+import tempfile
 
 pdf1 = "Inputs\\file-example_PDF_500_kB.pdf"
 
@@ -44,7 +45,7 @@ def AddPageNumbers(pdf1):
             f"\nendobj\n"
         )
 
-        NewObj[pageID] = streamObjStr
+        NewObj[pageID]= {"ID" : streamID, "content" : streamObjStr}
 
     PDF1_Objs = ObjectExtraction(PDF1String, XrefTable)
 
@@ -57,7 +58,8 @@ def AddPageNumbers(pdf1):
 
     NEW_PDF_STR = NewHeader + "\n\n"
     for ObjData in (PDF1_Objs):
-        if ObjData["OriginalID"] in PDF_Pages:
+        OBJ_ID = ObjData["OriginalID"]
+        if OBJ_ID in PDF_Pages:
             AlreadyMultiple = False
             content = ObjData["Content"]
             resources = (re.search(r"/\s*Resources (\d+) 0 R", content, flags=re.IGNORECASE))
@@ -80,21 +82,64 @@ def AddPageNumbers(pdf1):
                     newFontObj += f" /PageNumFont {fontObjID} 0 R "
                     newFontObj += fontObj[fontend:]
                     editedRes[int(fontID)] = newFontObj
-                    print(newFontObj)
+                    # print(newFontObj)
 
             singleContent = re.search(r"/Contents (\d+) 0 R", content, flags=re.IGNORECASE)
             if singleContent:
-                contentStart = int(singleContent.start()) - 1
+                contentStart = int(singleContent.start())
+                contentEnd = int(singleContent.end())
                 NewContent = content[:contentStart]
-                NewContent += f"/Contents [{singleContent.group(1)} 0 R, {singleContent.group(1)} 0 R]"
+                NewContent += f"/Contents [{singleContent.group(1)} 0 R, {NewObj[OBJ_ID]["ID"]} 0 R]"
+                NewContent += content[contentEnd:] + "endobj\n\n"
+            # print(content)
+            # print(NewContent)
+            # break
+            NEW_PDF_STR += NewContent + "\nendobj\n"
 
         else:
             if ObjData["OriginalID"] in editedRes.keys():
-                NEW_PDF_STR += editedRes[ObjData["OriginalID"]]
-                print("Added")
+                NEW_PDF_STR += editedRes[ObjData["OriginalID"]] + "endobj\n\n"
+                # print("Added")
             else:
-                NEW_PDF_STR += ObjData["Content"]
-                print("Added Same")
+                NEW_PDF_STR += ObjData["Content"] + "endobj\n\n"
+                print(ObjData["Content"][:100])
+                break
+
+    for PageNumObj in NewObj.values():
+        NEW_PDF_STR += PageNumObj["content"] + "\n"
+
+
+
+
+    NewXref, ObjNo = Make_Xref(NEW_PDF_STR)
+
+    NEW_PDF_STR += NewXref
+
+    byteOffset = NEW_PDF_STR.rindex("xref")
+    trailerObj = f"\ntrailer\n<<\n/Size {ObjNo +1}\n/Root {RootID} 0 R\n>>\nstartxref\n{byteOffset}\n%%EOF"
+    # NewTrailer = 
+
+    NEW_PDF_STR += trailerObj
+
+
+    encodedPDF = NEW_PDF_STR.encode("latin1")
+    
+    
+    # TEMP_DIR = tempfile.gettempdir()
+    # PDFName = os.path.basename(pdf1).split(".")[0]
+    # output_path = os.path.join(TEMP_DIR, f"{PDFName}-AddedPageNum.pdf")
+
+    with open("test.pdf" , "wb") as file:
+        file.write(encodedPDF)
+    
+    print("done")
+
+
+
+    # with open("data.txt", "w", encoding="latin1") as file:
+    #     file.write(NEW_PDF_STR)
+
+
 
 
 

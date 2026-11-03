@@ -247,7 +247,7 @@ def PDFCompressFunc(pdf_file):
         CombinePDFStr = headerObj + "\n\n" + NewBody + "\n\n"
 
         # calls helper function to form the new xref table for the pdf
-        xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
+        xreftable, ObjNumber = Make_Xref(CombinePDFStr)
         CombinePDFStr += xreftable #concatinates the new xref table
 
         byteOffset = CombinePDFStr.rfind("xref") #finds the byte offset of the new xref table

@@ -384,7 +384,7 @@ def Make_Header(pdfString):
 # takes the object find string and the final pdf string
 # returns the final xref table, can be directly added to the PDF string
 
-def Make_Xref(objectFindString, FinalPDFStr):
+def Make_Xref(FinalPDFStr):
 
     #makes a dictionary with object id as key and offset as value
     xrefDict = {}

@@ -184,7 +184,7 @@ def MergePDFFunc(*pdfs):
         CombinePDFStr = headerObj + combinedBodies + parentObj + catalogObj
 
         #making xref
-        xreftable, ObjNumber = Make_Xref(objectFindString, CombinePDFStr)
+        xreftable, ObjNumber = Make_Xref(CombinePDFStr)
 
         CombinePDFStr += xreftable
 
