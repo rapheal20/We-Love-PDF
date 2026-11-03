@@ -1,0 +1,12 @@
+# Build and executable folders
+build/
+dist/
+*.exe
+*.bin
+*.out
+
+# Storage and temp files
+WeLovePDF_Storage/
+*.pdf
+__pycache__/
+*.pyc
