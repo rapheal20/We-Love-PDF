@@ -10,10 +10,15 @@ from pptx.util import Pt
 from pptx.dml.color import RGBColor
 import math
 from CommonFunctionsForDocs import *
+import tempfile
+from werkzeug.utils import secure_filename
 
-pdf1 = "Inputs\\emaar1.pdf"
+#pdf1 = "Inputs\\emaar1.pdf"
 
 def PDFToPowerPointFunc(PDFPath):
+    BASE_DIR = os.path.join(os.path.expanduser('~'), 'WeLovePDF_Storage')
+
+    os.makedirs(BASE_DIR, exist_ok=True)
     try:
         extractedElements, firstBox = parse_pdf_to_spans(PDFPath)
 
@@ -162,15 +167,18 @@ def PDFToPowerPointFunc(PDFPath):
                     addPPTXRun(para, text, base, size, color)
 
             PDFName = os.path.basename(PDFPath).split(".")[0]
-            outputPath = f"AppOutputs/{PDFName}.pptx"
-            prs.save(outputPath)
-            
+            output_path = os.path.join(BASE_DIR, f"{PDFName}.pptx")
+            print(output_path,"Thisss")
+
+            prs.save(output_path)
+
         PPTXBuilder(extractedElements, firstBox, PDFPath)
 
         PDFName = os.path.basename(PDFPath).split(".")[0]
-        outputPath = f"AppOutputs/{PDFName}.pptx"
-        return [outputPath]
-  
+        output_path = os.path.join(BASE_DIR, f"{PDFName}.pptx")
+
+        return [output_path]
+    
     except Exception as e:
         raise e
         
