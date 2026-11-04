@@ -493,7 +493,7 @@ def FindParentsandKids(PDF, XrefTable, RootID, PDF_Data, DecompressedObjs):
 
 
  #this addes the Highest ID of PDF 1 into all the object ids of PDF 2 to avoid any repetition
-def ObjectExtraction(pdfDataStr, xreftab, idOffset=0):
+def ObjectExtraction(PDF, pdfDataStr, xreftab, DecompressedObjs, idOffset=0):
     ObjectList =[]
     for objID, objData in xreftab.items():
         if objData.get("type") == "n" and objData.get("offset") > 0:
@@ -504,5 +504,15 @@ def ObjectExtraction(pdfDataStr, xreftab, idOffset=0):
                 "OriginalID" : int(objID),
                 "NewID" : int(newID),
                 "Content" : pdfDataStr[offset:ObjEnd]
+                })
+
+        else:
+            ObjBody = GetObjectBytes(PDF, xreftab, objID, DecompressedObjs)
+            ObjBody = ObjBody.decode('latin1')
+            newID = objID + idOffset
+            ObjectList.append({
+                "OriginalID" : int(objID),
+                "NewID" : int(newID),
+                "Content" : ObjBody
                 })
     return ObjectList
